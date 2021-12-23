@@ -57,6 +57,13 @@ static inline int sdsHdrSize(char type) {
     return 0;
 }
 
+/**
+长度在0和2^5-1之间，选用SDS_TYPE_5类型的header。
+长度在2^5和2^8-1之间，选用SDS_TYPE_8类型的header。
+长度在2^8和2^16-1之间，选用SDS_TYPE_16类型的header。
+长度在2^16和2^32-1之间，选用SDS_TYPE_32类型的header。
+长度大于2^32的，选用SDS_TYPE_64类型的header。能表示的最大长度为2^64-1。
+*/
 static inline char sdsReqType(size_t string_size) {
     if (string_size < 1<<5)
         return SDS_TYPE_5;

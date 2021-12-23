@@ -44,6 +44,10 @@ typedef char *sds;
 
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
+// 不使用，此处仅做占位处理
+// attribute ((packed)) 取消编译阶段的内存优化对齐功能
+// sds一共有5种类型的header。之所以有5种，是为了能让不同长度的字符串可以使用不同大小的header。这样，短字符串就能使用较小的header，从而节省内存。
+//sdshdr5与其它几个header结构不同，它不包含alloc字段，而长度使用flags的高5位来存储。因此，它不能为字符串分配空余空间。如果字符串需要动态增长，那么它就必然要重新分配内存才行。所以说，这种类型的sds字符串更适合存储静态的短字符串（长度小于32）。
 struct __attribute__ ((__packed__)) sdshdr5 {
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
@@ -73,6 +77,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
     char buf[];
 };
 
+// 可以看出SDS_TYPE只占用了0,1,2,3,4五个数字，正好占用三位，我们就可以使用flags&SDS_TYPE_MASK来获取动态字符串对应的字符串类型
 #define SDS_TYPE_5  0
 #define SDS_TYPE_8  1
 #define SDS_TYPE_16 2

@@ -45,13 +45,16 @@
 #define DICT_ERR 1
 
 typedef struct dictEntry {
+    // 键
     void *key;
+    // 值
     union {
         void *val;
         uint64_t u64;
         int64_t s64;
         double d;
     } v;
+    // 指向下个哈希节点
     struct dictEntry *next;     /* Next entry in the same hash bucket. */
     void *metadata[];           /* An arbitrary number of bytes (starting at a
                                  * pointer-aligned address) of size as returned
@@ -77,8 +80,9 @@ typedef struct dictType {
 #define DICTHT_SIZE_MASK(exp) ((exp) == -1 ? 0 : (DICTHT_SIZE(exp))-1)
 
 struct dict {
+    // 类型特定函数
     dictType *type;
-
+    //  哈希表
     dictEntry **ht_table[2];
     unsigned long ht_used[2];
 
