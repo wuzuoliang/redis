@@ -40,23 +40,27 @@ extern const char *SDS_NOINIT;
 #include <stdarg.h>
 #include <stdint.h>
 
+// 定义了一个char 指针
 typedef char *sds;
 
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
-// 不使用，此处仅做占位处理
+// lsb 代表有效位的意思，
+// sdshdr5不使用，此处仅做占位处理
 // attribute ((packed)) 取消编译阶段的内存优化对齐功能
 // sds一共有5种类型的header。之所以有5种，是为了能让不同长度的字符串可以使用不同大小的header。这样，短字符串就能使用较小的header，从而节省内存。
 //sdshdr5与其它几个header结构不同，它不包含alloc字段，而长度使用flags的高5位来存储。因此，它不能为字符串分配空余空间。如果字符串需要动态增长，那么它就必然要重新分配内存才行。所以说，这种类型的sds字符串更适合存储静态的短字符串（长度小于32）。
 struct __attribute__ ((__packed__)) sdshdr5 {
+    // 当字符串很小时， `flags` 是一个8 个字节的组合字符，低位 3 bit 是字符串类型，高位 5bit是字符串长度。
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
 };
 struct __attribute__ ((__packed__)) sdshdr8 {
-    uint8_t len; /* used */
-    uint8_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
+    uint8_t len; /* used  当前已使用的内存空间长度*/
+    uint8_t alloc; /* excluding the header and null terminator  分配的内存空间长度,等于buf[]的总长度-1，因为buf有包括一个\  0的结束符*/
+    unsigned char flags; /* 3 lsb of type, 5 unused bits   只有3位有效位，因为类型的表示就是0到4，所有这个8位的flags 有5位没有被用到
+ */
+    char buf[] ;//实际的字符串存在这里
 };
 struct __attribute__ ((__packed__)) sdshdr16 {
     uint16_t len; /* used */
@@ -85,14 +89,20 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_64 4
 #define SDS_TYPE_MASK 7
 #define SDS_TYPE_BITS 3
+// 可以看到s本来是指向buf的位置，减去struct的长度正好就是开始的位置
+// 然后sh就指向了整个sds开始的位置
+// T就是占位符，返回不同类型的struct
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
+//下面这个就是直接返回对应的struct
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
+//这个类型的可以不关注因为没有被用到
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
+            // 一个字节高 5 位是长度，通过向右移动 3 位获得大小。
             return SDS_TYPE_5_LEN(flags);
         case SDS_TYPE_8:
             return SDS_HDR(8,s)->len;
@@ -106,10 +116,12 @@ static inline size_t sdslen(const sds s) {
     return 0;
 }
 
+// sdsavail 查询字符串对象空闲内存大小
 static inline size_t sdsavail(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
         case SDS_TYPE_5: {
+            // 小于 32 长度的内存，都是直接申请的，没有空余内存。
             return 0;
         }
         case SDS_TYPE_8: {
@@ -219,12 +231,14 @@ static inline void sdssetalloc(sds s, size_t newlen) {
             break;
     }
 }
-
+// 据字符串长度，分配合适的内存空间，设置数据结构的相关的成员数据
 sds sdsnewlen(const void *init, size_t initlen);
 sds sdstrynewlen(const void *init, size_t initlen);
+// 创建字符串对象
 sds sdsnew(const char *init);
 sds sdsempty(void);
 sds sdsdup(const sds s);
+// 释放字符串结构对象
 void sdsfree(sds s);
 sds sdsgrowzero(sds s, size_t len);
 sds sdscatlen(sds s, const void *t, size_t len);
