@@ -32,9 +32,15 @@
 #define __INTSET_H
 #include <stdint.h>
 
+// 整数集合，集合键的底层实现之一
+// SADD numbers 1 2 3 4 5
+// OBJECT ENCODING numbers
 typedef struct intset {
+    // 编码类型 参考intset.c
     uint32_t encoding;
+    // 长度
     uint32_t length;
+    // 保存数组的元素，从小到大，且不重复，int8_t不是真实的，需要看encoding的类型
     int8_t contents[];
 } intset;
 

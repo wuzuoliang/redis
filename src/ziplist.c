@@ -708,8 +708,20 @@ static inline void zipAssertValidEntry(unsigned char* zl, size_t zlbytes, unsign
     assert(zipEntrySafe(zl, zlbytes, p, &e, 1));
 }
 
+// 压缩列表的的新增和删除都有可能引起连锁更新
+/**
+ * 为节约内存而开发的结构
+ *
+ */
 /* Create a new empty ziplist. */
 unsigned char *ziplistNew(void) {
+    /**
+     * zlbytes uint32_t 4B 表示总长度
+     * zltail uint32_t 4B 记录表尾偏移量
+     * zllen uint16_t 2B 表示包含的数量
+     * entryX unknown 各节点
+     * zlend uint8_t 1B 特殊标识
+     */
     unsigned int bytes = ZIPLIST_HEADER_SIZE+ZIPLIST_END_SIZE;
     unsigned char *zl = zmalloc(bytes);
     ZIPLIST_BYTES(zl) = intrev32ifbe(bytes);
@@ -790,7 +802,7 @@ unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
 
         /* Update prev entry's info and advance the cursor. */
         rawlen = cur.headersize + cur.len;
-        prevlen = rawlen + delta; 
+        prevlen = rawlen + delta;
         prevlensize = zipStorePrevEntryLength(NULL, prevlen);
         prevoffset = p - zl;
         p += rawlen;
@@ -828,8 +840,8 @@ unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
         zipEntry(zl + prevoffset, &cur); /* no need for "safe" variant since we already iterated on all these entries above. */
         rawlen = cur.headersize + cur.len;
         /* Move entry to tail and reset prevlen. */
-        memmove(p - (rawlen - cur.prevrawlensize), 
-                zl + prevoffset + cur.prevrawlensize, 
+        memmove(p - (rawlen - cur.prevrawlensize),
+                zl + prevoffset + cur.prevrawlensize,
                 rawlen - cur.prevrawlensize);
         p -= (rawlen + delta);
         if (cur.prevrawlen == 0) {
@@ -2528,7 +2540,7 @@ int ziplistTest(int argc, char **argv, int flags) {
 
     printf("Edge cases of __ziplistCascadeUpdate:\n");
     {
-        /* Inserting a entry with data length greater than ZIP_BIG_PREVLEN-4 
+        /* Inserting a entry with data length greater than ZIP_BIG_PREVLEN-4
          * will leads to cascade update. */
         size_t s1 = ZIP_BIG_PREVLEN-4, s2 = ZIP_BIG_PREVLEN-3;
         zl = ziplistNew();

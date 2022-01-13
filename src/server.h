@@ -749,13 +749,19 @@ typedef struct RedisModuleDigest {
 #define OBJ_SHARED_REFCOUNT INT_MAX     /* Global object never destroyed. */
 #define OBJ_STATIC_REFCOUNT (INT_MAX-1) /* Object allocated in the stack. */
 #define OBJ_FIRST_SPECIAL_REFCOUNT OBJ_STATIC_REFCOUNT
+// redis每一个对象都是由redisObject表示
 typedef struct redisObject {
+    // 类型
     unsigned type:4;
+    // 编码
     unsigned encoding:4;
+    // 内存淘汰策略
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
+    // 引用计数
     int refcount;
+    // 指向底层数据结构的指针，而这些结构由对象的encoding属性决定
     void *ptr;
 } robj;
 
@@ -1180,7 +1186,7 @@ typedef struct zskiplist {
     struct zskiplistNode *header, *tail;
     // 跳跃表节点数量，不算表头节点
     unsigned long length;
-    // 层数最大那个节点的层数，不算表头节点
+    // 层数最大那个节点的层数，不算表头节点，0~31之间的随机数
     int level;
 } zskiplist;
 

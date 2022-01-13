@@ -34,6 +34,8 @@
 #define ZIPLIST_HEAD 0
 #define ZIPLIST_TAIL 1
 
+// 压缩列表是list 和 hash 的底层实现之一
+// 当list ，hash的键值比较少，且项是小整数或者短字符串时
 /* Each entry in the ziplist is either a string or an integer. */
 typedef struct {
     /* When string is used, it is provided with the length (slen). */
