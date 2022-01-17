@@ -121,6 +121,124 @@ redis自己构建了一套基于引用计数的内存回收机制，redisObject�
 ### 对象共享
 redis会共享已创建的整数对象，比如0到9999的整数值预先创建
 
-
 ### 对象的空转时长
 redis对象的内部有个lru的空转时长，object idltime key，当服务器内存回收算法为lru时，会优先释放空转时间长的对象
+
+### 检查redis延迟的方式
+- 一个是看响应延迟，一个是看基线性能， `./redis-cli --intrinsic-latency 120`
+- 是否有高复杂度的命令，`keys *`,`smembers`等等，寻求可替换的命令
+- 是否有大KEY，大VALUE
+- 是否有大量同时过期的键值，因为redis过期策略是异步删除，如果同时有很多就会引起redis操作阻塞
+
+### 检查redis延迟的方式2
+- 文件系统：AOF模式
+当主线程使用后台子线程执行了一次 fsync，需要再次把新接收的操作记录写回磁盘时，如果主线程发现上一次的 fsync 还没有执行完，那么它就会阻塞。所以，如果后台子线程执行的 fsync 频繁阻塞的话（比如 AOF 重写占用了大量的磁盘 IO 带宽），主线程也会阻塞，导致 Redis 性能变慢。
+
+由于 fsync 后台子线程和 AOF 重写子进程的存在，主 IO 线程一般不会被阻塞。但是，如果在重写日志时，AOF 重写子进程的写入量比较大，fsync 线程也会被阻塞，进而阻塞主线程，导致延迟增加。
+
+- 操作系统的内存 swap
+内存 swap 是操作系统里将内存数据在内存和磁盘间来回换入和换出的机制，涉及到磁盘的读写，所以，一旦触发 swap，无论是被换入数据的进程，还是被换出数据的进程，其性能都会受到慢速磁盘读写的影响。swap 触发后影响的是 Redis 主 IO 线程，这会极大地增加 Redis 的响应时间。
+
+通常，触发 swap 的原因主要是物理机器内存不足，对于 Redis 而言，有两种常见的情况：Redis 实例自身使用了大量的内存，导致物理机器的可用内存不足；和 Redis 实例在同一台机器上运行的其他进程，在进行大量的文件读写操作。文件读写本身会占用系统内存，这会导致分配给 Redis 实例的内存量变少，进而触发 Redis 发生 swap。
+
+- 操作系统：内存大页
+Linux 内核从 2.6.38 开始支持内存大页机制，该机制支持 2MB 大小的内存页分配，而常规的内存页分配是按 4KB 的粒度来执行的。
+
+Redis 为了提供数据可靠性保证，需要将数据做持久化保存。这个写入过程由额外的线程执行，所以，此时，Redis 主线程仍然可以接收客户端写请求。客户端的写请求可能会修改正在进行持久化的数据。在这一过程中，Redis 就会采用写时复制机制，也就是说，一旦有数据要被修改，Redis 并不会直接修改内存中的数据，而是将这些数据拷贝一份，然后再进行修改。如果采用了内存大页，那么，即使客户端请求只修改 100B 的数据，Redis 也需要拷贝 2MB 的大页。相反，如果是常规内存页机制，只用拷贝 4KB。两者相比，你可以看到，当客户端请求修改或新写入数据较多时，内存大页机制将导致大量的拷贝，这就会影响 Redis 正常的访存操作，最终导致性能变慢。
+
+- 碎片整理
+Redis在进行内存碎片整理时，由于是主线程操作的，所以这块也是一个影响Redis性能的风险点。
+### 关于如何分析、排查、解决Redis变慢问题
+1、使用复杂度过高的命令（例如SORT/SUION/ZUNIONSTORE/KEYS），或一次查询全量数据（例如LRANGE key 0 N，但N很大）
+
+分析：a) 查看slowlog是否存在这些命令 b) Redis进程CPU使用率是否飙升（聚合运算命令导致）
+
+解决：a) 不使用复杂度过高的命令，或用其他方式代替实现（放在客户端做） b) 数据尽量分批查询（LRANGE key 0 N，建议N<=100，查询全量数据建议使用HSCAN/SSCAN/ZSCAN）
+
+2、操作bigkey
+
+分析：a) slowlog出现很多SET/DELETE变慢命令（bigkey分配内存和释放内存变慢） b) 使用redis-cli -h $host -p $port --bigkeys扫描出很多bigkey
+
+解决：a) 优化业务，避免存储bigkey b) Redis 4.0+可开启lazy-free机制
+
+3、大量key集中过期
+
+分析：a) 业务使用EXPIREAT/PEXPIREAT命令 b) Redis info中的expired_keys指标短期突增
+
+解决：a) 优化业务，过期增加随机时间，把时间打散，减轻删除过期key的压力 b) 运维层面，监控expired_keys指标，有短期突增及时报警排查
+
+4、Redis内存达到maxmemory
+
+分析：a) 实例内存达到maxmemory，且写入量大，淘汰key压力变大 b) Redis info中的evicted_keys指标短期突增
+
+解决：a) 业务层面，根据情况调整淘汰策略（随机比LRU快） b) 运维层面，监控evicted_keys指标，有短期突增及时报警 c) 集群扩容，多个实例减轻淘汰key的压力
+
+5、大量短连接请求
+
+分析：Redis处理大量短连接请求，TCP三次握手和四次挥手也会增加耗时
+
+解决：使用长连接操作Redis
+
+6、生成RDB和AOF重写fork耗时严重
+
+分析：a) Redis变慢只发生在生成RDB和AOF重写期间 b) 实例占用内存越大，fork拷贝内存页表越久 c) Redis info中latest_fork_usec耗时变长
+
+解决：a) 实例尽量小 b) Redis尽量部署在物理机上 c) 优化备份策略（例如低峰期备份） d) 合理配置repl-backlog和slave client-output-buffer-limit，避免主从全量同步 e) 视情况考虑关闭AOF f) 监控latest_fork_usec耗时是否变长
+
+7、AOF使用awalys机制
+
+分析：磁盘IO负载变高
+
+解决：a) 使用everysec机制 b) 丢失数据不敏感的业务不开启AOF
+
+8、使用Swap
+
+分析：a) 所有请求全部开始变慢 b) slowlog大量慢日志 c) 查看Redis进程是否使用到了Swap
+
+解决：a) 增加机器内存 b) 集群扩容 c) Swap使用时监控报警
+
+9、进程绑定CPU不合理
+
+分析：a) Redis进程只绑定一个CPU逻辑核 b) NUMA架构下，网络中断处理程序和Redis进程没有绑定在同一个Socket下
+
+解决：a) Redis进程绑定多个CPU逻辑核 b) 网络中断处理程序和Redis进程绑定在同一个Socket下
+
+10、开启透明大页机制
+
+分析：生成RDB和AOF重写期间，主线程处理写请求耗时变长（拷贝内存副本耗时变长）
+
+解决：关闭透明大页机制
+
+11、网卡负载过高
+
+分析：a) TCP/IP层延迟变大，丢包重传变多 b) 是否存在流量过大的实例占满带宽
+
+解决：a) 机器网络资源监控，负载过高及时报警 b) 提前规划部署策略，访问量大的实例隔离部署
+
+总之，Redis的性能与CPU、内存、网络、磁盘都息息相关，任何一处发生问题，都会影响到Redis的性能。
+
+### 如果需要替换Keys *,会使用scan命令，那么rehash时候会不会漏或重复
+在使用SCAN命令时，不会漏key，但可能会得到重复的key，这主要和Redis的Rehash机制有关。Redis的所有key存在一个全局的哈希表中，如果存入的key慢慢变多，在达到一定阈值后，为了避免哈希冲突导致查询效率降低，这个哈希表会进行扩容。与之对应的，key数量逐渐变少时，这个哈希表会缩容以节省空间。
+
+1、为什么不会漏key？Redis在SCAN遍历全局哈希表时，采用`高位进位法` `(https://blog.csdn.net/u014439693/article/details/108325632)`的方式遍历哈希桶，当哈希表扩容后，通过这种算法遍历，旧哈希表中的数据映射到新哈希表，依旧会保留原来的先后顺序，这样就可以保证遍历时不会遗漏也不会重复。
+
+2、为什么SCAN会得到重复的key？这个情况主要发生在哈希表缩容。已经遍历过的哈希桶在缩容时，会映射到新哈希表没有遍历到的位置，所以继续遍历就会对同一个key返回多次。
+
+SCAN是遍历整个实例的所有key，另外Redis针对Hash/Set/Sorted Set也提供了HSCAN/SSCAN/ZSCAN命令，用于遍历一个key中的所有元素，建议在获取一个bigkey的所有数据时使用，避免发生阻塞风险。
+
+但是使用HSCAN/SSCAN/ZSCAN命令，返回的元素数量与执行SCAN逻辑可能不同。执行SCAN $cursor COUNT $count时一次最多返回count个数的key，数量不会超过count。
+
+但Hash/Set/Sorted Set元素数量比较少时，底层会采用intset/ziplist方式存储，如果以这种方式存储，在执行HSCAN/SSCAN/ZSCAN命令时，会无视count参数，直接把所有元素一次性返回，也就是说，得到的元素数量是会大于count参数的。当底层转为哈希表或跳表存储时，才会真正使用发count参数，最多返回count个元素。
+
+### 删除数据后，为什么内存占用率还是很高？
+内因：内存分配器的分配策略
+外因：键值对大小不一样和删改操作
+
+通过INFO MEMORY 观察 `mem_fragmentation_ratio`来粗略判断内存碎片问题，`used_memory_rss 是操作系统实际分配给 Redis 的物理内存空间，里面就包含了碎片；而 used_memory 是 Redis 为了保存数据实际申请使用的空间,used_memory_rss 是操作系统实际分配给 Redis 的物理内存空间，里面就包含了碎片；而 used_memory 是 Redis 为了保存数据实际申请使用的空间。`
+
+### redis自身碎片清理
+- 重启
+- Redis 需要启用自动内存碎片清理，可以把 activedefrag 配置项设置为 yes
+
+### 如果 mem_fragmentation_ratio 小于 1 了，Redis 的内存使用是什么情况呢？会对 Redis 的性能和内存空间利用率造成什么影响？
+mem_fragmentation_ratio小于1，说明used_memory_rss小于了used_memory，这意味着操作系统分配给Redis进程的物理内存，要小于Redis实际存储数据的内存，也就是说Redis没有足够的物理内存可以使用了，这会导致Redis一部分内存数据会被换到Swap中，之后当Redis访问Swap中的数据时，延迟会变大，性能下降。
