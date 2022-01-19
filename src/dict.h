@@ -85,7 +85,8 @@ struct dict {
     //  哈希表
     dictEntry **ht_table[2];
     unsigned long ht_used[2];
-
+    //rehash索引
+    //当rehash不在进行时，值为-1
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
 
     /* Keep small vars at end for optimal (minimal) struct padding */

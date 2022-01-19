@@ -1,6 +1,7 @@
 # Redis复习
 
 ## 结构类型
+https://zhuanlan.zhihu.com/p/140726424
 ---
 
 ### SDS简单动态字符串
@@ -30,6 +31,17 @@ struct __attribute__ ((__packed__)) sdshdr8 {
 - 兼容部分C字符串函数。
 
 ---
+### 压缩链表
+其中每个entry都是由previous_entry_length、encoding、content三个组成。
+
+previous_entry_length：前一个节点的长度，可以是1个字节或者5个字节，如果前一个节点长度小于254字节，就为1，否则为5。通过previous_entry_length可以知道前一个节点的地址（当前地址减去previous_entry_length）。
+encoding：节点的encoding属性记录了节点的content属性所保存数据的类型以及长度。
+encoding是一字节、两字节或者五字节长时，值的最高位为00、01或者10的是字节数组编码：这种编码表示节点的content属性保存着字节数组，数组的长度由编码除去最高两位之后的其他位记录；
+encoding是一字节长时，值的最高位以11开头的是整数编码：这种编码表示节点的content属性保存着整数值，整数值的类型和长度由编码除去最高两位之后的其他位记录。
+content：节点的值。
+
+高位00表示 content是一个字节数据，后6位010011等于11，表示content的长度
+11表示是个数字
 ### 链表
 
 文件:
