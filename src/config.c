@@ -261,7 +261,7 @@ typedef struct standardConfig {
     typeData data; /* The type specific data exposed used by the interface */
 } standardConfig;
 
-#define MODIFIABLE_CONFIG 0 /* This is the implied default for a standard 
+#define MODIFIABLE_CONFIG 0 /* This is the implied default for a standard
                              * config, which is mutable. */
 #define IMMUTABLE_CONFIG (1ULL<<0) /* Can this value only be set at startup? */
 #define SENSITIVE_CONFIG (1ULL<<1) /* Does this value contain sensitive information */
@@ -475,9 +475,9 @@ void loadServerConfigFromString(char *config) {
         /* If there's no matching above, we try matching them with deprecated configs */
         if (!match) {
             for (deprecatedConfig *config = deprecated_configs; config->name != NULL; config++) {
-                if (!strcasecmp(argv[0], config->name) && 
-                    config->argc_min <= argc && 
-                    argc <= config->argc_max) 
+                if (!strcasecmp(argv[0], config->name) &&
+                    config->argc_min <= argc &&
+                    argc <= config->argc_max)
                 {
                     match = 1;
                     break;
@@ -704,20 +704,25 @@ static void restoreBackupConfig(standardConfig **set_configs, sds *old_values, i
 
 void configSetCommand(client *c) {
     const char *errstr = NULL;
-    const char *invalid_arg_name = NULL;
-    const char *err_arg_name = NULL;
-    standardConfig **set_configs; /* TODO: make this a dict for better performance */
-    sds *new_values;
-    sds *old_values = NULL;
-    apply_fn *apply_fns; /* TODO: make this a set for better performance */
-    int config_count, i, j;
-    int invalid_args = 0, deny_loading_error = 0;
-    int *config_map_fns;
+    serverAssertWithInfo(c,c->argv[2],sdsEncodedObject(c->argv[2]));
+    serverAssertWithInfo(c,c->argv[3],sdsEncodedObject(c->argv[3]));
+    o = c->argv[3];
 
-    /* Make sure we have an even number of arguments: conf-val pairs */
-    if (c->argc & 1) {
-        addReplyErrorObject(c, shared.syntaxerr);
-        return;
+    /* Iterate the configs that are standard */
+    for (standardConfig *config = configs; config->name != NULL; config++) {
+        if (!(config->flags & IMMUTABLE_CONFIG) &&
+            (!strcasecmp(c->argv[2]->ptr,config->name) ||
+            (config->alias && !strcasecmp(c->argv[2]->ptr,config->alias))))
+        {
+            if (config->flags & SENSITIVE_CONFIG) {
+                redactClientCommandArgument(c,3);
+            }
+            if (!config->interface.set(config->data,o->ptr,1,&errstr)) {
+                goto badfmt;
+            }
+            addReply(c,shared.ok);
+            return;
+        }
     }
     config_count = (c->argc - 2) / 2;
 
@@ -779,7 +784,7 @@ void configSetCommand(client *c) {
             invalid_args = 1;
         }
     }
-    
+
     if (invalid_args) goto err;
 
     /* Backup old values before setting new ones */
@@ -1042,7 +1047,7 @@ struct rewriteConfigState *rewriteConfigReadOldFile(char *path) {
             sdsfree(argv[0]);
             argv[0] = alt;
         }
-        /* If this is sentinel config, we use sentinel "sentinel <config>" as option 
+        /* If this is sentinel config, we use sentinel "sentinel <config>" as option
             to avoid messing up the sequence. */
         if (server.sentinel_mode && argc > 1 && !strcasecmp(argv[0],"sentinel")) {
             sds sentinelOption = sdsempty();
@@ -1499,7 +1504,7 @@ sds getConfigDebugInfo() {
     state->force_write = 1; /* Force the output */
     state->needs_signature = 0; /* Omit the rewrite signature */
 
-    /* Iterate the configs and "rewrite" the ones that have 
+    /* Iterate the configs and "rewrite" the ones that have
      * the debug flag. */
     for (standardConfig *config = configs; config->name != NULL; config++) {
         if (!(config->flags & DEBUG_CONFIG)) continue;
@@ -2706,7 +2711,7 @@ standardConfig configs[] = {
     createIntConfig("timeout", NULL, MODIFIABLE_CONFIG, 0, INT_MAX, server.maxidletime, 0, INTEGER_CONFIG, NULL, NULL), /* Default client timeout: infinite */
     createIntConfig("replica-announce-port", "slave-announce-port", MODIFIABLE_CONFIG, 0, 65535, server.slave_announce_port, 0, INTEGER_CONFIG, NULL, NULL),
     createIntConfig("tcp-backlog", NULL, IMMUTABLE_CONFIG, 0, INT_MAX, server.tcp_backlog, 511, INTEGER_CONFIG, NULL, NULL), /* TCP listen backlog. */
-    createIntConfig("cluster-port", NULL, IMMUTABLE_CONFIG, 0, 65535, server.cluster_port, 0, INTEGER_CONFIG, NULL, NULL),    
+    createIntConfig("cluster-port", NULL, IMMUTABLE_CONFIG, 0, 65535, server.cluster_port, 0, INTEGER_CONFIG, NULL, NULL),
     createIntConfig("cluster-announce-bus-port", NULL, MODIFIABLE_CONFIG, 0, 65535, server.cluster_announce_bus_port, 0, INTEGER_CONFIG, NULL, NULL), /* Default: Use +10000 offset. */
     createIntConfig("cluster-announce-port", NULL, MODIFIABLE_CONFIG, 0, 65535, server.cluster_announce_port, 0, INTEGER_CONFIG, NULL, NULL), /* Use server.port */
     createIntConfig("cluster-announce-tls-port", NULL, MODIFIABLE_CONFIG, 0, 65535, server.cluster_announce_tls_port, 0, INTEGER_CONFIG, NULL, NULL), /* Use server.tls_port */

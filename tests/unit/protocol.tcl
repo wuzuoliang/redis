@@ -145,7 +145,11 @@ start_server {tags {"protocol network"}} {
         # restore state
         r hello 2
         set _ $res
+<<<<<<< HEAD
     } {Some real reply following the attribute} {needs:debug resp3}
+=======
+    } {Some real reply following the attribute}
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
 
     test {RESP3 attributes readraw} {
         r hello 3
@@ -168,18 +172,30 @@ start_server {tags {"protocol network"}} {
         r deferred 0
         r hello 2
         set _ {}
+<<<<<<< HEAD
     } {} {needs:debug resp3}
+=======
+    } {}
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
 
     test {RESP3 attributes on RESP2} {
         r hello 2
         set res [r debug protocol attrib]
         set _ $res
+<<<<<<< HEAD
     } {Some real reply following the attribute} {needs:debug}
+=======
+    } {Some real reply following the attribute}
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
 
     test "test big number parsing" {
         r hello 3
         r debug protocol bignum
+<<<<<<< HEAD
     } {1234567999999999999999999999999999999} {needs:debug resp3}
+=======
+    } {1234567999999999999999999999999999999}
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
 
     test "test bool parsing" {
         r hello 3
@@ -189,6 +205,7 @@ start_server {tags {"protocol network"}} {
         assert_equal [r debug protocol true] 1
         assert_equal [r debug protocol false] 0
         set _ {}
+<<<<<<< HEAD
     } {} {needs:debug resp3}
 
     test "test verbatim str parsing" {
@@ -221,6 +238,9 @@ start_server {tags {"protocol network"}} {
         assert_equal [r exec] 2
     }
 
+=======
+    } {}
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
 }
 
 start_server {tags {"regression"}} {

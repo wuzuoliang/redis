@@ -396,7 +396,7 @@ int clusterSaveConfig(int do_fsync) {
         ci = sdsgrowzero(ci,sb.st_size);
         memset(ci+content_size,'\n',sb.st_size-content_size);
     }
-    
+
     if (write(fd,ci,sdslen(ci)) != (ssize_t)sdslen(ci)) goto err;
     if (do_fsync) {
         server.cluster->todo_before_sleep &= ~CLUSTER_TODO_FSYNC_CONFIG;
@@ -490,7 +490,7 @@ void deriveAnnouncedPorts(int *announced_port, int *announced_pport,
     *announced_port = port;
     *announced_pport = server.tls_cluster ? server.port : 0;
     *announced_cport = server.cluster_port ? server.cluster_port : port + CLUSTER_PORT_INCR;
-    
+
     /* Config overriding announced ports. */
     if (server.tls_cluster && server.cluster_announce_tls_port) {
         *announced_port = server.cluster_announce_tls_port;
@@ -623,7 +623,7 @@ void clusterInit(void) {
         serverLog(LL_WARNING, "Failed listening on port %u (cluster), aborting.", cport);
         exit(1);
     }
-    
+
     if (createSocketAcceptHandler(&server.cfd, clusterAcceptHandler) != C_OK) {
         serverPanic("Unrecoverable error creating Redis Cluster socket accept handler.");
     }
@@ -3769,7 +3769,7 @@ void clusterCron(void) {
          */
         if(clusterNodeCronHandleReconnect(node, handshake_timeout, now)) continue;
     }
-    dictReleaseIterator(di); 
+    dictReleaseIterator(di);
 
     /* Ping some random node 1 time every 10 iterations, so that we usually ping
      * one random node every second. */
@@ -4595,8 +4595,8 @@ int getSlotOrReply(client *c, robj *o) {
 
 /* Returns an indication if the replica node is fully available
  * and should be listed in CLUSTER SLOTS response.
- * Returns 1 for available nodes, 0 for nodes that have 
- * not finished their initial sync, in failed state, or are 
+ * Returns 1 for available nodes, 0 for nodes that have
+ * not finished their initial sync, in failed state, or are
  * otherwise considered not available to serve read commands. */
 static int isReplicaAvailable(clusterNode *node) {
     if (nodeFailed(node)) {
@@ -4634,7 +4634,7 @@ void clusterUpdateSlots(client *c, unsigned char *slots, int del) {
     for (j = 0; j < CLUSTER_SLOTS; j++) {
         if (slots[j]) {
             int retval;
-                
+
             /* If this slot was set as importing we can clear this
              * state as now we are the real owner of the slot. */
             if (server.cluster->importing_slots_from[j])
@@ -4853,7 +4853,7 @@ NULL
                 return;
             }
         }
-        clusterUpdateSlots(c, slots, del);    
+        clusterUpdateSlots(c, slots, del);
         zfree(slots);
         clusterDoBeforeSleep(CLUSTER_TODO_UPDATE_STATE|CLUSTER_TODO_SAVE_CONFIG);
         addReply(c,shared.ok);
@@ -5507,7 +5507,7 @@ void restoreCommand(client *c) {
 
     rioInitWithBuffer(&payload,c->argv[3]->ptr);
     if (((type = rdbLoadObjectType(&payload)) == -1) ||
-        ((obj = rdbLoadObject(type,&payload,key->ptr,c->db->id,NULL)) == NULL))
+        ((obj = rdbLoadObject(type,&payload,key->ptr,NULL)) == NULL))
     {
         addReplyError(c,"Bad data format");
         return;

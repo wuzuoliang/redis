@@ -105,15 +105,15 @@ start_server {tags {"cli"}} {
     }
 
     proc run_cli {args} {
-        _run_cli [srv host] [srv port] $::dbnum {} {*}$args
+        _run_cli [srv host] [srv port] 9 {} {*}$args
     }
 
     proc run_cli_with_input_pipe {cmd args} {
-        _run_cli [srv host] [srv port] $::dbnum [list pipe $cmd] -x {*}$args
+        _run_cli [srv host] [srv port] 9 [list pipe $cmd] -x {*}$args
     }
 
     proc run_cli_with_input_file {path args} {
-        _run_cli [srv host] [srv port] $::dbnum [list path $path] -x {*}$args
+        _run_cli [srv host] [srv port] 9 [list path $path] -x {*}$args
     }
 
     proc run_cli_host_port_db {host port db args} {
@@ -366,7 +366,7 @@ if {!$::tls} { ;# fake_redis_node doesn't support TLS
         assert_match "OK" [r config set repl-diskless-sync yes]
         assert_match "OK" [r config set repl-diskless-sync-delay 0]
         test_redis_cli_repl
-    } {} {needs:repl}
+    } {}
 
     test "Piping raw protocol" {
         set cmds [tmpfile "cli_cmds"]

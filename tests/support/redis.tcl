@@ -258,12 +258,6 @@ proc ::redis::redis_read_bool fd {
     return -code error "Bad protocol, '$v' as bool type"
 }
 
-proc ::redis::redis_read_verbatim_str fd {
-    set v [redis_bulk_read $fd]
-    # strip the first 4 chars ("txt:")
-    return [string range $v 4 end]
-}
-
 proc ::redis::redis_read_reply {id fd} {
     if {$::redis::readraw($id)} {
         return [redis_read_line $fd]
@@ -278,7 +272,6 @@ proc ::redis::redis_read_reply {id fd} {
             + {return [redis_read_line $fd]}
             , {return [expr {double([redis_read_line $fd])}]}
             # {return [redis_read_bool $fd]}
-            = {return [redis_read_verbatim_str $fd]}
             - {return -code error [redis_read_line $fd]}
             $ {return [redis_bulk_read $fd]}
             > -

@@ -35,6 +35,7 @@ test {CONFIG SET bind address} {
         $rd PING
         $rd close
     }
+<<<<<<< HEAD
 } {} {external:skip}
 
 # Attempt to connect to host using a client bound to bindaddr,
@@ -162,4 +163,6 @@ start_server {config "minimal.conf" tags {"external:skip"}} {
             assert_equal {PONG} [$r2 ping]
         }
     }
+=======
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
 }

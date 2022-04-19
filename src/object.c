@@ -1016,7 +1016,8 @@ size_t objectComputeSize(robj *key, robj *o, size_t sample_size, int dbid) {
             dictReleaseIterator(di);
             if (samples) asize += (double)elesize/samples*dictSize(d);
         } else if (o->encoding == OBJ_ENCODING_INTSET) {
-            asize = sizeof(*o)+zmalloc_size(o->ptr);
+            intset *is = o->ptr;
+            asize = sizeof(*o)+sizeof(*is)+(size_t)is->encoding*is->length;
         } else {
             serverPanic("Unknown set encoding");
         }
@@ -1416,7 +1417,11 @@ robj *objectCommandLookup(client *c, robj *key) {
 
 robj *objectCommandLookupOrReply(client *c, robj *key, robj *reply) {
     robj *o = objectCommandLookup(c,key);
+<<<<<<< HEAD
     if (!o) addReplyOrErrorObject(c, reply);
+=======
+    if (!o) SentReplyOnKeyMiss(c, reply);
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
     return o;
 }
 

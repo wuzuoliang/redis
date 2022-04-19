@@ -40,7 +40,6 @@
 static char error[1044];
 static off_t epos;
 static long long line = 1;
-static time_t to_timestamp = 0;
 
 int consumeNewline(char *buf) {
     if (strncmp(buf,"\r\n",2) != 0) {
@@ -48,47 +47,6 @@ int consumeNewline(char *buf) {
         return 0;
     }
     line += 1;
-    return 1;
-}
-
-int readAnnotations(FILE *fp) {
-    char buf[AOF_ANNOTATION_LINE_MAX_LEN];
-    while (1) {
-        epos = ftello(fp);
-        if (fgets(buf, sizeof(buf), fp) == NULL) {
-            return 0;
-        }
-        if (buf[0] == '#') {
-            if (to_timestamp && strncmp(buf, "#TS:", 4) == 0) {
-                time_t ts = strtol(buf+4, NULL, 10);
-                if (ts <= to_timestamp) continue;
-                if (epos == 0) {
-                    printf("AOF has nothing before timestamp %ld, "
-                           "aborting...\n", to_timestamp);
-                    fclose(fp);
-                    exit(1);
-                }
-                /* Truncate remaining AOF if exceeding 'to_timestamp' */
-                if (ftruncate(fileno(fp), epos) == -1) {
-                    printf("Failed to truncate AOF to timestamp %ld\n",
-                            to_timestamp);
-                    exit(1);
-                } else {
-                    printf("Successfully truncated AOF to timestamp %ld\n",
-                            to_timestamp);
-                    fclose(fp);
-                    exit(0);
-                }
-            }
-            continue;
-        } else {
-            if (fseek(fp, -(ftello(fp)-epos), SEEK_CUR) == -1) {
-                ERROR("Fseek error: %s", strerror(errno));
-                return 0;
-            }
-            return 1;
-        }
-    }
     return 1;
 }
 
@@ -256,14 +214,6 @@ int redis_check_aof_main(int argc, char **argv) {
 
     off_t pos = process(fp);
     off_t diff = size-pos;
-
-    /* In truncate-to-timestamp mode, just exit if there is nothing to truncate. */
-    if (diff == 0 && to_timestamp) {
-        printf("Truncate nothing in AOF to timestamp %ld\n", to_timestamp);
-        fclose(fp);
-        exit(0);
-    }
-
     printf("AOF analyzed: size=%lld, ok_up_to=%lld, ok_up_to_line=%lld, diff=%lld\n",
         (long long) size, (long long) pos, line, (long long) diff);
     if (diff > 0) {

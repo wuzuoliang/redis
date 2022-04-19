@@ -240,6 +240,7 @@ iget_defrag_hint(tsdn_t *tsdn, void* ptr) {
 			int free_in_slab = extent_nfree_get(slab);
 			if (free_in_slab) {
 				const bin_info_t *bin_info = &bin_infos[binind];
+<<<<<<< HEAD
 				/* Find number of non-full slabs and the number of regs in them */
 				unsigned long curslabs = 0;
 				size_t curregs = 0;
@@ -255,6 +256,14 @@ iget_defrag_hint(tsdn_t *tsdn, void* ptr) {
 						curregs -= bin_info->nregs - extent_nfree_get(bb->slabcur);
 						curslabs -= 1;
 					}
+=======
+				unsigned long curslabs = bin->stats.curslabs;
+				size_t curregs = bin->stats.curregs;
+				if (bin->slabcur) {
+					/* remove slabcur from the overall utilization */
+					curregs -= bin_info->nregs - extent_nfree_get(bin->slabcur);
+					curslabs -= 1;
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
 				}
 				/* Compare the utilization ratio of the slab in question to the total average
 				 * among non-full slabs. To avoid precision loss in division, we do that by

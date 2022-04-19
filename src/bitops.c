@@ -478,7 +478,7 @@ int getBitfieldTypeFromArgument(client *c, robj *o, int *sign, int *bits) {
  * so that the 'maxbit' bit can be addressed. The object is finally
  * returned. Otherwise if the key holds a wrong type NULL is returned and
  * an error is sent to the client. */
-robj *lookupStringForBitCommand(client *c, uint64_t maxbit, int *created) {
+robj *lookupStringForBitCommand(client *c, uint64_t maxbit) {
     size_t byte = maxbit >> 3;
     robj *o = lookupKeyWrite(c->db,c->argv[1]);
     if (checkType(c,o,OBJ_STRING)) return NULL;
@@ -954,34 +954,7 @@ void bitposCommand(client *c) {
         addReplyLongLong(c, -1);
     } else {
         long bytes = end-start+1;
-        long long pos;
-        unsigned char tmpchar;
-        if (first_byte_neg_mask) {
-            if (bit) tmpchar = p[start] & ~first_byte_neg_mask;
-            else tmpchar = p[start] | first_byte_neg_mask;
-            /* Special case, there is only one byte */
-            if (last_byte_neg_mask && bytes == 1) {
-                if (bit) tmpchar = tmpchar & ~last_byte_neg_mask;
-                else tmpchar = tmpchar | last_byte_neg_mask;
-            }
-            pos = redisBitpos(&tmpchar,1,bit);
-            /* If there are no more bytes or we get valid pos, we can exit early */
-            if (bytes == 1 || (pos != -1 && pos != 8)) goto result;
-            start++;
-            bytes--;
-        }
-        /* If the last byte has not bits in the range, we should exclude it */
-        long curbytes = bytes - (last_byte_neg_mask ? 1 : 0);
-        if (curbytes > 0) {
-            pos = redisBitpos(p+start,curbytes,bit);
-            /* If there is no more bytes or we get valid pos, we can exit early */
-            if (bytes == curbytes || (pos != -1 && pos != (long long)curbytes<<3)) goto result;
-            start += curbytes;
-            bytes -= curbytes;
-        }
-        if (bit) tmpchar = p[end] & ~last_byte_neg_mask;
-        else tmpchar = p[end] | last_byte_neg_mask;
-        pos = redisBitpos(&tmpchar,1,bit);
+        long long pos = redisBitpos(p+start,bytes,bit);
 
     result:
         /* If we are looking for clear bits, and the user specified an exact
@@ -1028,7 +1001,7 @@ struct bitfieldOp {
 void bitfieldGeneric(client *c, int flags) {
     robj *o;
     uint64_t bitoffset;
-    int j, numops = 0, changes = 0, created = 0;
+    int j, numops = 0, changes = 0;
     struct bitfieldOp *ops = NULL; /* Array of ops to execute at end. */
     int owtype = BFOVERFLOW_WRAP; /* Overflow type. */
     int readonly = 1;

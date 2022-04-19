@@ -309,8 +309,6 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
                                            and AOF client */
 #define CLIENT_REPL_RDBONLY (1ULL<<42) /* This client is a replica that only wants
                                           RDB without replication buffer. */
-#define CLIENT_NO_EVICT (1ULL<<43) /* This client is protected against client
-                                      memory eviction. */
 
 /* Client block type (btype field in client structure)
  * if CLIENT_BLOCKED flag is set. */
@@ -1763,10 +1761,27 @@ struct redisServer {
     int cluster_config_file_lock_fd;   /* cluster config fd, will be flock */
     unsigned long long cluster_link_sendbuf_limit_bytes;  /* Memory usage limit on individual link send buffers*/
     /* Scripting */
-    client *script_caller;       /* The client running script right now, or NULL */
-    mstime_t script_time_limit;  /* Script timeout in milliseconds */
-    int script_oom;                    /* OOM detected when script start */
-    int script_disable_deny_script;    /* Allow running commands marked "no-script" inside a script. */
+    lua_State *lua; /* The Lua interpreter. We use just one for all clients */
+    client *lua_client;   /* The "fake client" to query Redis from Lua */
+    client *lua_caller;   /* The client running EVAL right now, or NULL */
+    char* lua_cur_script; /* SHA1 of the script currently running, or NULL */
+    dict *lua_scripts;         /* A dictionary of SHA1 -> Lua scripts */
+    unsigned long long lua_scripts_mem;  /* Cached scripts' memory + oh */
+    mstime_t lua_time_limit;  /* Script timeout in milliseconds */
+    monotime lua_time_start;  /* monotonic timer to detect timed-out script */
+    mstime_t lua_time_snapshot; /* Snapshot of mstime when script is started */
+    int lua_write_dirty;  /* True if a write command was called during the
+                             execution of the current script. */
+    int lua_random_dirty; /* True if a random command was called during the
+                             execution of the current script. */
+    int lua_replicate_commands; /* True if we are doing single commands repl. */
+    int lua_multi_emitted;/* True if we already propagated MULTI. */
+    int lua_repl;         /* Script replication flags for redis.set_repl(). */
+    int lua_timedout;     /* True if we reached the time limit for script
+                             execution. */
+    int lua_kill;         /* Kill the script if true. */
+    int lua_always_replicate_commands; /* Default replication type. */
+    int lua_oom;          /* OOM detected when script start? */
     /* Lazy free */
     int lazyfree_lazy_eviction;
     int lazyfree_lazy_expire;
@@ -2316,7 +2331,6 @@ void addReplyErrorSds(client *c, sds err);
 void addReplyError(client *c, const char *err);
 void addReplyStatus(client *c, const char *status);
 void addReplyDouble(client *c, double d);
-void addReplyLongLongWithPrefix(client *c, long long ll, char prefix);
 void addReplyBigNum(client *c, const char* num, size_t len);
 void addReplyHumanLongDouble(client *c, long double d);
 void addReplyLongLong(client *c, long long ll);
@@ -2342,8 +2356,7 @@ void rewriteClientCommandVector(client *c, int argc, ...);
 void rewriteClientCommandArgument(client *c, int i, robj *newval);
 void replaceClientCommandVector(client *c, int argc, robj **argv);
 void redactClientCommandArgument(client *c, int argc);
-size_t getClientOutputBufferMemoryUsage(client *c);
-size_t getClientMemoryUsage(client *c, size_t *output_buffer_mem_usage);
+unsigned long getClientOutputBufferMemoryUsage(client *c);
 int freeClientsInAsyncFreeQueue(void);
 int closeClientOnOutputBufferLimitReached(client *c, int async);
 int getClientType(client *c);
@@ -2667,7 +2680,7 @@ unsigned char *zzlFirstInRange(unsigned char *zl, zrangespec *range);
 unsigned char *zzlLastInRange(unsigned char *zl, zrangespec *range);
 unsigned long zsetLength(const robj *zobj);
 void zsetConvert(robj *zobj, int encoding);
-void zsetConvertToListpackIfNeeded(robj *zobj, size_t maxelelen, size_t totelelen);
+void zsetConvertToZiplistIfNeeded(robj *zobj, size_t maxelelen, size_t totelelen);
 int zsetScore(robj *zobj, sds member, double *score);
 unsigned long zslGetRank(zskiplist *zsl, double score, sds o);
 int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, double *newscore);
@@ -2824,8 +2837,9 @@ int allowProtectedAction(int config, client *c);
 /* db.c -- Keyspace access API */
 int removeExpire(redisDb *db, robj *key);
 void deleteExpiredKeyAndPropagate(redisDb *db, robj *keyobj);
-void propagateDeletion(redisDb *db, robj *key, int lazy);
+void propagateExpire(redisDb *db, robj *key, int lazy);
 int keyIsExpired(redisDb *db, robj *key);
+int expireIfNeeded(redisDb *db, robj *key);
 long long getExpire(redisDb *db, robj *key);
 void setExpire(client *c, redisDb *db, robj *key, long long when);
 int checkAlreadyExpired(long long when);
@@ -2837,6 +2851,7 @@ robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags);
 robj *lookupKeyWriteWithFlags(redisDb *db, robj *key, int flags);
 robj *objectCommandLookup(client *c, robj *key);
 robj *objectCommandLookupOrReply(client *c, robj *key, robj *reply);
+void SentReplyOnKeyMiss(client *c, robj *reply);
 int objectSetLRUOrLFU(robj *val, long long lfu_freq, long long lru_idle,
                        long long lru_clock, int lru_multiplier);
 #define LOOKUP_NONE 0

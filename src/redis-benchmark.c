@@ -358,9 +358,9 @@ fail:
     else fprintf(stderr, "%s\n", hostsocket);
     int abort_test = 0;
     if (reply && reply->type == REDIS_REPLY_ERROR &&
-        (!strncmp(reply->str,"NOAUTH",6) ||
+        (!strncmp(reply->str,"NOAUTH",5) ||
          !strncmp(reply->str,"WRONGPASS",9) ||
-         !strncmp(reply->str,"NOPERM",6)))
+         !strncmp(reply->str,"NOPERM",5)))
         abort_test = 1;
     freeReplyObject(reply);
     redisFree(c);
@@ -526,21 +526,21 @@ static void readHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
                             * before requesting the new configuration. */
                             fetch_slots = 1;
                             do_wait = 1;
-                            fprintf(stderr, "Error from server %s:%d: %s.\n",
-                                    c->cluster_node->ip,
-                                    c->cluster_node->port,
-                                    r->str);
+                            printf("Error from server %s:%d: %s.\n",
+                                   c->cluster_node->ip,
+                                   c->cluster_node->port,
+                                   r->str);
                         }
                         if (do_wait) sleep(1);
                         if (fetch_slots && !fetchClusterSlotsConfiguration(c))
                             exit(1);
                     } else {
                         if (c->cluster_node) {
-                            fprintf(stderr, "Error from server %s:%d: %s\n",
-                                 c->cluster_node->ip,
-                                 c->cluster_node->port,
-                                 r->str);
-                        } else fprintf(stderr, "Error from server: %s\n", r->str);
+                            printf("Error from server %s:%d: %s\n",
+                                c->cluster_node->ip,
+                                c->cluster_node->port,
+                                r->str);
+                        } else printf("Error from server: %s\n", r->str);
                         exit(1);
                     }
                 }
@@ -1286,8 +1286,7 @@ static int fetchClusterSlotsConfiguration(client c) {
     atomicGetIncr(config.is_fetching_slots, is_fetching_slots, 1);
     if (is_fetching_slots) return -1; //TODO: use other codes || errno ?
     atomicSet(config.is_fetching_slots, 1);
-    fprintf(stderr,
-            "WARNING: Cluster slots configuration changed, fetching new one...\n");
+    printf("WARNING: Cluster slots configuration changed, fetching new one...\n");
     const char *errmsg = "Failed to update cluster slots configuration";
     static dictType dtype = {
         dictSdsHash,               /* hash function */
@@ -1469,9 +1468,14 @@ int parseOptions(int argc, char **argv) {
         } else if (!strcmp(argv[i],"-I")) {
             config.idlemode = 1;
         } else if (!strcmp(argv[i],"-e")) {
+<<<<<<< HEAD
             fprintf(stderr,
                     "WARNING: -e option has no effect. "
                     "We now immediately exit on error to avoid false results.\n");
+=======
+            printf("WARNING: -e option has been deprecated. "
+                   "We now immediatly exit on error to avoid false results.\n");
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
         } else if (!strcmp(argv[i],"-t")) {
             if (lastarg) goto invalid;
             /* We get the list of tests to run as a string in the form
@@ -1796,9 +1800,9 @@ int main(int argc, char **argv) {
             config.num_threads = config.cluster_node_count;
     } else {
         config.redis_config =
-            getRedisConfig(config.conn_info.hostip, config.conn_info.hostport, config.hostsocket);
+            getRedisConfig(config.hostip, config.hostport, config.hostsocket);
         if (config.redis_config == NULL) {
-            fprintf(stderr, "WARNING: Could not fetch server CONFIG\n");
+            fprintf(stderr, "WARN: could not fetch server CONFIG\n");
         }
     }
     if (config.num_threads > 0) {
@@ -2009,7 +2013,6 @@ int main(int argc, char **argv) {
     } while(config.loop);
 
     zfree(data);
-    freeCliConnInfo(config.conn_info);
     if (config.redis_config != NULL) freeRedisConfig(config.redis_config);
 
     return 0;

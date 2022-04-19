@@ -47,13 +47,13 @@ void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
         if (!sdsEncodedObject(argv[i]))
             continue;
         size_t len = sdslen(argv[i]->ptr);
-        if (len > server.hash_max_listpack_value) {
+        if (len > server.hash_max_ziplist_value) {
             hashTypeConvert(o, OBJ_ENCODING_HT);
             return;
         }
         sum += len;
     }
-    if (!lpSafeToAdd(o->ptr, sum))
+    if (!ziplistSafeToAdd(o->ptr, sum))
         hashTypeConvert(o, OBJ_ENCODING_HT);
 }
 

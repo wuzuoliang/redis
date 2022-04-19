@@ -428,6 +428,21 @@ start_server {tags {"geo"}} {
         assert {[lindex $res 3] > 166}
     }
 
+    test {GEORADIUSBYMEMBER STORE/STOREDIST option: plain usage} {
+        r del points{t}
+        r geoadd points{t} 13.361389 38.115556 "Palermo" 15.087269 37.502669 "Catania"
+
+        r georadiusbymember points{t} Palermo 500 km store points2{t}
+        assert_equal {Palermo Catania} [r zrange points2{t} 0 -1]
+
+        r georadiusbymember points{t} Catania 500 km storedist points2{t}
+        assert_equal {Catania Palermo} [r zrange points2{t} 0 -1]
+
+        set res [r zrange points2{t} 0 -1 withscores]
+        assert {[lindex $res 1] < 1}
+        assert {[lindex $res 3] > 166}
+    }
+
     test {GEOSEARCHSTORE STORE option: plain usage} {
         r geosearchstore points2{t} points{t} fromlonlat 13.361389 38.115556 byradius 500 km
         assert_equal [r zrange points{t} 0 -1] [r zrange points2{t} 0 -1]

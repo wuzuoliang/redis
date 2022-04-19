@@ -91,15 +91,11 @@ void sendChildInfoGeneric(childInfoType info_type, size_t keys, double progress,
         cow = zmalloc_get_private_dirty(-1);
         cow_updated = getMonotonicUs();
         cow_update_cost = cow_updated - now;
-        if (cow > peak_cow) peak_cow = cow;
-        sum_cow += cow;
-        update_count++;
 
-        int cow_info = (info_type != CHILD_INFO_TYPE_CURRENT_INFO);
-        if (cow || cow_info) {
-            serverLog(cow_info ? LL_NOTICE : LL_VERBOSE,
-                      "Fork CoW for %s: current %zu MB, peak %zu MB, average %llu MB",
-                      pname, cow>>20, peak_cow>>20, (sum_cow/update_count)>>20);
+        if (cow) {
+            serverLog((info_type == CHILD_INFO_TYPE_CURRENT_INFO) ? LL_VERBOSE : LL_NOTICE,
+                      "%s: %zu MB of memory used by copy-on-write",
+                      pname, cow / (1024 * 1024));
         }
     }
 
@@ -135,7 +131,7 @@ void updateChildInfo(childInfoType information_type, size_t cow, monotime cow_up
 }
 
 /* Read child info data from the pipe.
- * if complete data read into the buffer, 
+ * if complete data read into the buffer,
  * data is stored into *buffer, and returns 1.
  * otherwise, the partial data is left in the buffer, waiting for the next read, and returns 0. */
 int readChildInfo(childInfoType *information_type, size_t *cow, monotime *cow_updated, size_t *keys, double* progress) {

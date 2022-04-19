@@ -465,7 +465,7 @@ void sentinelConfigSetCommand(client *c);
 
 /* this array is used for sentinel config lookup, which need to be loaded
  * before monitoring masters config to avoid dependency issues */
-const char *preMonitorCfgName[] = { 
+const char *preMonitorCfgName[] = {
     "announce-ip",
     "announce-port",
     "deny-scripts-reconfig",
@@ -1569,10 +1569,10 @@ int sentinelResetMasterAndChangeAddress(sentinelRedisInstance *master, char *hos
     if (newaddr == NULL) return C_ERR;
 
     /* There can be only 0 or 1 slave that has the newaddr.
-     * and It can add old master 1 more slave. 
+     * and It can add old master 1 more slave.
      * so It allocates dictSize(master->slaves) + 1          */
     slaves = zmalloc(sizeof(sentinelAddr*)*(dictSize(master->slaves) + 1));
-    
+
     /* Don't include the one having the address we are switching to. */
     di = dictGetIterator(master->slaves);
     while((de = dictNext(di)) != NULL) {
@@ -2210,14 +2210,14 @@ void rewriteConfigSentinelOption(struct rewriteConfigState *state) {
         line = sdscatprintf(sdsempty(), "sentinel sentinel-pass %s", sentinel.sentinel_auth_pass);
         rewriteConfigRewriteLine(state,"sentinel sentinel-pass",line,1);
     } else {
-        rewriteConfigMarkAsProcessed(state,"sentinel sentinel-pass");  
+        rewriteConfigMarkAsProcessed(state,"sentinel sentinel-pass");
     }
 
     dictReleaseIterator(di);
 
-    /* NOTE: the purpose here is in case due to the state change, the config rewrite 
-     does not handle the configs, however, previously the config was set in the config file, 
-     rewriteConfigMarkAsProcessed should be put here to mark it as processed in order to 
+    /* NOTE: the purpose here is in case due to the state change, the config rewrite
+     does not handle the configs, however, previously the config was set in the config file,
+     rewriteConfigMarkAsProcessed should be put here to mark it as processed in order to
      delete the old config entry.
     */
     rewriteConfigMarkAsProcessed(state,"sentinel monitor");
@@ -3431,7 +3431,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_info_period = ll;
-            
+
         } else if (!strcasecmp(option,"ping-period") && moreargs > 0) {
             /* ping-period <milliseconds> */
             robj *o = c->argv[++j];
@@ -3440,7 +3440,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_ping_period = ll;
-           
+
         } else if (!strcasecmp(option,"ask-period") && moreargs > 0) {
             /* ask-period <milliseconds> */
             robj *o = c->argv[++j];
@@ -3449,7 +3449,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_ask_period = ll;
-           
+
         } else if (!strcasecmp(option,"publish-period") && moreargs > 0) {
             /* publish-period <milliseconds> */
             robj *o = c->argv[++j];
@@ -3458,7 +3458,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_publish_period = ll;
-           
+
         }else if (!strcasecmp(option,"default-down-after") && moreargs > 0) {
             /* default-down-after <milliseconds> */
             robj *o = c->argv[++j];
@@ -3467,7 +3467,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_default_down_after = ll;
-           
+
         } else if (!strcasecmp(option,"tilt-trigger") && moreargs > 0) {
             /* tilt-trigger <milliseconds> */
             robj *o = c->argv[++j];
@@ -3476,7 +3476,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_tilt_trigger = ll;
-           
+
         } else if (!strcasecmp(option,"tilt-period") && moreargs > 0) {
             /* tilt-period <milliseconds> */
             robj *o = c->argv[++j];
@@ -3485,7 +3485,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_tilt_period = ll;
-           
+
         } else if (!strcasecmp(option,"slave-reconf-timeout") && moreargs > 0) {
             /* slave-reconf-timeout <milliseconds> */
             robj *o = c->argv[++j];
@@ -3494,7 +3494,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_slave_reconf_timeout = ll;
-           
+
         } else if (!strcasecmp(option,"min-link-reconnect-period") && moreargs > 0) {
             /* min-link-reconnect-period <milliseconds> */
             robj *o = c->argv[++j];
@@ -3503,7 +3503,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_min_link_reconnect_period = ll;
-           
+
         } else if (!strcasecmp(option,"default-failover-timeout") && moreargs > 0) {
             /* default-failover-timeout <milliseconds> */
             robj *o = c->argv[++j];
@@ -3512,7 +3512,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_default_failover_timeout = ll;
-           
+
         } else if (!strcasecmp(option,"election-timeout") && moreargs > 0) {
             /* election-timeout <milliseconds> */
             robj *o = c->argv[++j];
@@ -3521,7 +3521,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_election_timeout = ll;
-           
+
         } else if (!strcasecmp(option,"script-max-runtime") && moreargs > 0) {
             /* script-max-runtime <milliseconds> */
             robj *o = c->argv[++j];
@@ -3530,7 +3530,7 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_script_max_runtime = ll;
-           
+
         } else if (!strcasecmp(option,"script-retry-delay") && moreargs > 0) {
             /* script-retry-delay <milliseconds> */
             robj *o = c->argv[++j];
@@ -3539,10 +3539,10 @@ void sentinelSetDebugConfigParameters(client *c){
                 goto badfmt;
             }
             sentinel_script_retry_delay = ll;
-           
+
         } else {
             addReplyErrorFormat(c,"Unknown option or number of arguments for "
-                                  "SENTINEL SET '%s'", option);            
+                                  "SENTINEL SET '%s'", option);
         }
 
     }
@@ -3559,7 +3559,7 @@ badfmt: /* Bad format errors */
 
 
 void addReplySentinelDebugInfo(client *c) {
-   
+
     void *mbl;
     int fields = 0;
 
@@ -3588,7 +3588,7 @@ void addReplySentinelDebugInfo(client *c) {
     addReplyBulkCString(c,"DEFAULT-FAILOVER-TIMEOUT");
     addReplyBulkLongLong(c,sentinel_default_failover_timeout);
     fields++;
-    
+
     addReplyBulkCString(c,"TILT-TRIGGER");
     addReplyBulkLongLong(c,sentinel_tilt_trigger);
     fields++;
@@ -4049,7 +4049,7 @@ NULL
             addReplySentinelDebugInfo(c);
         else
             sentinelSetDebugConfigParameters(c);
-    } 
+    }
     else {
         addReplySubcommandSyntaxError(c);
     }
@@ -4304,7 +4304,7 @@ void sentinelSetCommand(client *c) {
         switch(numargs) {
         case 2:
             sentinelEvent(LL_WARNING,"+set",ri,"%@ %s %s",(char*)c->argv[old_j]->ptr,
-                                                          redacted ? "******" : (char*)c->argv[old_j+1]->ptr);
+                                                          (char*)c->argv[old_j+1]->ptr);
             break;
         case 3:
             sentinelEvent(LL_WARNING,"+set",ri,"%@ %s %s %s",(char*)c->argv[old_j]->ptr,
@@ -4397,7 +4397,7 @@ void sentinelCheckSubjectivelyDown(sentinelRedisInstance *ri) {
          ri->role_reported == SRI_SLAVE &&
          mstime() - ri->role_reported_time >
           (ri->down_after_period+sentinel_info_period*2)) ||
-          (ri->flags & SRI_MASTER_REBOOT && 
+          (ri->flags & SRI_MASTER_REBOOT &&
            mstime()-ri->master_reboot_since_time > ri->master_reboot_down_after_period))
     {
         /* Is subjectively down */

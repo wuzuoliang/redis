@@ -31,8 +31,6 @@
 #include "cluster.h"
 #include "atomicvar.h"
 #include "latency.h"
-#include "script.h"
-#include "functions.h"
 
 #include <signal.h>
 #include <ctype.h>
@@ -158,7 +156,15 @@ robj *lookupKeyWriteWithFlags(redisDb *db, robj *key, int flags) {
 robj *lookupKeyWrite(redisDb *db, robj *key) {
     return lookupKeyWriteWithFlags(db, key, LOOKUP_NONE);
 }
-
+void SentReplyOnKeyMiss(client *c, robj *reply){
+    serverAssert(sdsEncodedObject(reply));
+    sds rep = reply->ptr;
+    if (sdslen(rep) > 1 && rep[0] == '-'){
+        addReplyErrorObject(c, reply);
+    } else {
+        addReply(c,reply);
+    }
+}
 robj *lookupKeyReadOrReply(client *c, robj *key, robj *reply) {
     robj *o = lookupKeyRead(c->db, key);
     if (!o) addReplyOrErrorObject(c, reply);
@@ -217,8 +223,8 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
     if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
         val->lru = old->lru;
     }
-    /* Although the key is not really deleted from the database, we regard 
-    overwrite as two steps of unlink+add, so we still need to call the unlink 
+    /* Although the key is not really deleted from the database, we regard
+    overwrite as two steps of unlink+add, so we still need to call the unlink
     callback of the module. */
     moduleNotifyKeyUnlink(key,old,db->id);
     dictSetVal(db->dict, de, val);
@@ -1171,8 +1177,8 @@ void copyCommand(client *c) {
     long long expire;
     int j, replace = 0, delete = 0;
 
-    /* Obtain source and target DB pointers 
-     * Default target DB is the same as the source DB 
+    /* Obtain source and target DB pointers
+     * Default target DB is the same as the source DB
      * Parse the REPLACE option and targetDB option. */
     src = c->db;
     dst = c->db;
@@ -1222,7 +1228,7 @@ void copyCommand(client *c) {
     }
     expire = getExpire(c->db,key);
 
-    /* Return zero if the key already exists in the target DB. 
+    /* Return zero if the key already exists in the target DB.
      * If REPLACE option is selected, delete newkey from targetDB. */
     if (lookupKeyWrite(dst,newkey) != NULL) {
         if (replace) {
@@ -1347,7 +1353,7 @@ void swapMainDbWithTempDb(redisDb *tempDb) {
         redisDb *activedb = &server.db[i], *newdb = &tempDb[i];
 
         /* Swap hash tables. Note that we don't swap blocking_keys,
-         * ready_keys and watched_keys, since clients 
+         * ready_keys and watched_keys, since clients
          * remain in the same DB they were. */
         activedb->dict = newdb->dict;
         activedb->expires = newdb->expires;
@@ -1466,7 +1472,7 @@ void deleteExpiredKeyAndPropagate(redisDb *db, robj *keyobj) {
     latencyAddSampleIfNeeded("expire-del",expire_latency);
     notifyKeyspaceEvent(NOTIFY_EXPIRED,"expired",keyobj,db->id);
     signalModifiedKey(NULL, db, keyobj);
-    propagateDeletion(db,keyobj,server.lazyfree_lazy_expire);
+    propagateExpire(db,keyobj,server.lazyfree_lazy_expire);
     server.stat_expiredkeys++;
 }
 
@@ -1522,8 +1528,8 @@ int keyIsExpired(redisDb *db, robj *key) {
      * only the first time it is accessed and not in the middle of the
      * script execution, making propagation to slaves / AOF consistent.
      * See issue #1525 on Github for more information. */
-    if (server.script_caller) {
-        now = evalTimeSnapshot();
+    if (server.lua_caller) {
+        now = server.lua_time_snapshot;
     }
     /* If we are in the middle of a command execution, we still want to use
      * a reference time that does not change: in that case we just use the

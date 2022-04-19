@@ -1020,6 +1020,7 @@ start_server {tags {"scripting needs:debug external:skip"}} {
         catch {r '\0hello\0'} e
         assert_match {*Unknown Redis Lua debugger command*} $e
     }
+<<<<<<< HEAD
 
     test {Test scripting debug lua stack overflow} {
         r script debug sync
@@ -1161,3 +1162,6 @@ start_server {tags {"scripting resp3 needs:debug"}} {
     r debug set-disable-deny-scripts 0
 }
 } ;# foreach is_eval
+=======
+}
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
