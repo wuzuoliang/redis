@@ -79,9 +79,7 @@ unsigned char *lpNext(unsigned char *lp, unsigned char *p);
 unsigned char *lpPrev(unsigned char *lp, unsigned char *p);
 size_t lpBytes(unsigned char *lp);
 unsigned char *lpSeek(unsigned char *lp, long index);
-typedef int (*listpackValidateEntryCB)(unsigned char *p, unsigned int head_count, void *userdata);
-int lpValidateIntegrity(unsigned char *lp, size_t size, int deep,
-                        listpackValidateEntryCB entry_cb, void *cb_userdata);
+int lpValidateIntegrity(unsigned char *lp, size_t size, int deep);
 unsigned char *lpValidateFirst(unsigned char *lp);
 int lpValidateNext(unsigned char *lp, unsigned char **pp, size_t lpbytes);
 unsigned int lpCompare(unsigned char *p, unsigned char *s, uint32_t slen);

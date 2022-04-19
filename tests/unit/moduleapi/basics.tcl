@@ -8,6 +8,7 @@ start_server {tags {"modules"}} {
         r test.basics
     } {ALL TESTS PASSED}
 
+<<<<<<< HEAD
     test {test rm_call auto mode} {
         r hello 2
         set reply [r test.rmcallautomode]
@@ -38,3 +39,7 @@ start_server {tags {"modules external:skip"} overrides {enable-module-command no
        assert_error "ERR*MODULE command not allowed*" {r module load $testmodule}
     }
 }
+=======
+    r module unload test
+}
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807

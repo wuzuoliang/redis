@@ -786,6 +786,12 @@ void lcsCommand(client *c) {
         goto cleanup;
     }
 
+    /* Detect string truncation or later overflows. */
+    if (sdslen(a) >= UINT32_MAX-1 || sdslen(b) >= UINT32_MAX-1) {
+        addReplyError(c, "String too long for LCS");
+        goto cleanup;
+    }
+
     /* Compute the LCS using the vanilla dynamic programming technique of
      * building a table of LCS(x,y) substrings. */
     uint32_t alen = sdslen(a);
@@ -800,15 +806,10 @@ void lcsCommand(client *c) {
     unsigned long long lcssize = (unsigned long long)(alen+1)*(blen+1); /* Can't overflow due to the size limits above. */
     unsigned long long lcsalloc = lcssize * sizeof(uint32_t);
     uint32_t *lcs = NULL;
-    if (lcsalloc < SIZE_MAX && lcsalloc / lcssize == sizeof(uint32_t)) {
-        if (lcsalloc > (size_t)server.proto_max_bulk_len) {
-            addReplyError(c, "Insufficient memory, transient memory for LCS exceeds proto-max-bulk-len");
-            goto cleanup;
-        }
+    if (lcsalloc < SIZE_MAX && lcsalloc / lcssize == sizeof(uint32_t))
         lcs = ztrymalloc(lcsalloc);
-    }
     if (!lcs) {
-        addReplyError(c, "Insufficient memory, failed allocating transient memory for LCS");
+        addReplyError(c, "Insufficient memory");
         goto cleanup;
     }
 
@@ -941,4 +942,3 @@ cleanup:
     if (objb) decrRefCount(objb);
     return;
 }
-

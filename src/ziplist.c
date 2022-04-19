@@ -268,7 +268,7 @@
 }
 
 /* Don't let ziplists grow over 1GB in any case, don't wanna risk overflow in
- * zlbytes */
+ * zlbytes*/
 #define ZIPLIST_MAX_SAFETY_SIZE (1<<30)
 int ziplistSafeToAdd(unsigned char* zl, size_t add) {
     size_t len = zl? ziplistBlobLen(zl): 0;

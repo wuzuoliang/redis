@@ -230,7 +230,11 @@ int Block_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
      * callback and differentiate the different code flows above.
      */
     blocked_client = RedisModule_BlockClient(ctx, Block_RedisCommand,
+<<<<<<< HEAD
             timeout > 0 ? Block_RedisCommand : NULL, HelloBlock_FreeStringData, timeout);
+=======
+            timeout > 0 ? Block_RedisCommand : NULL, NULL, timeout);
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
     return REDISMODULE_OK;
 }
 
@@ -253,7 +257,11 @@ int Release_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
     RedisModuleString *replystr = argv[1];
     RedisModule_RetainString(ctx, replystr);
+<<<<<<< HEAD
     RedisModule_UnblockClient(blocked_client, replystr);
+=======
+    int err = RedisModule_UnblockClient(blocked_client, replystr);
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
     blocked_client = NULL;
 
     RedisModule_ReplyWithSimpleString(ctx, "OK");

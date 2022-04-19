@@ -265,10 +265,15 @@ jobs:
     - name: testprep
       run: |
         sudo apt-get update
+<<<<<<< HEAD
         sudo apt-get install tcl8.6 tclx valgrind -y
     - name: test
       if: true && !contains(github.event.inputs.skiptests, 'redis')
       run: ./runtest --valgrind --no-latency --verbose --clients 1 --timeout 2400 --dump-logs ${{github.event.inputs.test_args}}
+=======
+        sudo apt-get install tcl8.6 valgrind -y
+        ./runtest --valgrind --verbose --clients 1 --tags -large-memory --dump-logs
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
     - name: module api test
       if: true && !contains(github.event.inputs.skiptests, 'modules')
       run: ./runtest-moduleapi --valgrind --no-latency --verbose --clients 1 --timeout 2400 --dump-logs ${{github.event.inputs.test_args}}
@@ -298,10 +303,15 @@ jobs:
     - name: testprep
       run: |
         sudo apt-get update
+<<<<<<< HEAD
         sudo apt-get install tcl8.6 tclx valgrind -y
     - name: test
       if: true && !contains(github.event.inputs.skiptests, 'redis')
       run: ./runtest --valgrind --no-latency --verbose --clients 1 --timeout 2400 --dump-logs ${{github.event.inputs.test_args}}
+=======
+        sudo apt-get install tcl8.6 valgrind -y
+        ./runtest --valgrind --verbose --clients 1 --tags -large-memory --dump-logs
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
     - name: module api test
       if: true && !contains(github.event.inputs.skiptests, 'modules')
       run: ./runtest-moduleapi --valgrind --no-latency --verbose --clients 1 --timeout 2400 --dump-logs ${{github.event.inputs.test_args}}
@@ -527,11 +537,19 @@ jobs:
         sync: rsync
         prepare: pkg install -y bash gmake lang/tcl86 lang/tclx
         run: >
+<<<<<<< HEAD
           gmake || exit 1 ;
           if echo "${{github.event.inputs.skiptests}}" | grep -vq redis ; then ./runtest --verbose --timeout 2400 --no-latency --dump-logs ${{github.event.inputs.test_args}} || exit 1 ; fi ;
           if echo "${{github.event.inputs.skiptests}}" | grep -vq modules ; then MAKE=gmake ./runtest-moduleapi --verbose --timeout 2400 --no-latency --dump-logs ${{github.event.inputs.test_args}} || exit 1 ; fi ;
           if echo "${{github.event.inputs.skiptests}}" | grep -vq sentinel ; then ./runtest-sentinel ${{github.event.inputs.cluster_test_args}} || exit 1 ; fi ;
           if echo "${{github.event.inputs.skiptests}}" | grep -vq cluster ; then ./runtest-cluster ${{github.event.inputs.cluster_test_args}} || exit 1 ; fi ;
+=======
+          gmake &&
+          ./runtest --accurate --verbose --no-latency --tags -large-memory --dump-logs &&
+          MAKE=gmake ./runtest-moduleapi --verbose &&
+          ./runtest-sentinel &&
+          ./runtest-cluster
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
 
   test-alpine-jemalloc:
     runs-on: ubuntu-latest

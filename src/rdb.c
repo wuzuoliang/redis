@@ -550,7 +550,7 @@ void *rdbGenericLoadStringObject(rio *rdb, int flags, size_t *lenptr) {
         robj *o = encode ? tryCreateStringObject(SDS_NOINIT,len) :
                            tryCreateRawStringObject(SDS_NOINIT,len);
         if (!o) {
-            serverLog(isRestoreContext()? LL_VERBOSE: LL_WARNING, "rdbGenericLoadStringObject failed allocating %llu bytes", len);
+            serverLog(server.loading? LL_WARNING: LL_VERBOSE, "rdbGenericLoadStringObject failed allocating %llu bytes", len);
             return NULL;
         }
         if (len && rioRead(rdb,o->ptr,len) == 0) {
@@ -1404,7 +1404,7 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
     if (fsync(fileno(fp))) goto werr;
     if (fclose(fp)) { fp = NULL; goto werr; }
     fp = NULL;
-    
+
     /* Use RENAME to make sure the DB file is changed atomically only
      * if the generate DB file is ok. */
     if (rename(tmpfile,filename) == -1) {
@@ -1578,7 +1578,7 @@ static int _ziplistPairsEntryConvertAndValidate(unsigned char *p, unsigned int h
     return 1;
 }
 
-/* Validate the integrity of the data structure while converting it to 
+/* Validate the integrity of the data structure while converting it to
  * listpack and storing it at 'lp'.
  * The function is safe to call on non-validated ziplists, it returns 0
  * when encounter an integrity validation issue. */
@@ -1697,7 +1697,7 @@ int lpPairsValidateIntegrityAndDups(unsigned char *lp, size_t size, int deep) {
  * On success a newly allocated object is returned, otherwise NULL.
  * When the function returns NULL and if 'error' is not NULL, the
  * integer pointed by 'error' is set to the type of error that occurred */
-robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
+robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int *error) {
     robj *o = NULL, *ele, *dec;
     uint64_t len;
     unsigned int i;
@@ -1864,11 +1864,11 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
         }
 
         /* Convert *after* loading, since sorted sets are not stored ordered. */
-        if (zsetLength(o) <= server.zset_max_listpack_entries &&
-            maxelelen <= server.zset_max_listpack_value &&
-            lpSafeToAdd(NULL, totelelen))
+        if (zsetLength(o) <= server.zset_max_ziplist_entries &&
+            maxelelen <= server.zset_max_ziplist_value &&
+            ziplistSafeToAdd(NULL, totelelen))
         {
-            zsetConvert(o,OBJ_ENCODING_LISTPACK);
+            zsetConvert(o,OBJ_ENCODING_ZIPLIST);
         }
     } else if (rdbtype == RDB_TYPE_HASH) {
         uint64_t len;
@@ -1924,9 +1924,9 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
             }
 
             /* Convert to hash table if size threshold is exceeded */
-            if (sdslen(field) > server.hash_max_listpack_value ||
-                sdslen(value) > server.hash_max_listpack_value ||
-                !lpSafeToAdd(o->ptr, sdslen(field)+sdslen(value)))
+            if (sdslen(field) > server.hash_max_ziplist_value ||
+                sdslen(value) > server.hash_max_ziplist_value ||
+                !ziplistSafeToAdd(o->ptr, sdslen(field)+sdslen(value)))
             {
                 hashTypeConvert(o, OBJ_ENCODING_HT);
                 ret = dictAdd((dict*)o->ptr, field, value);
@@ -1941,9 +1941,11 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
                 break;
             }
 
-            /* Add pair to listpack */
-            o->ptr = lpAppend(o->ptr, (unsigned char*)field, sdslen(field));
-            o->ptr = lpAppend(o->ptr, (unsigned char*)value, sdslen(value));
+            /* Add pair to ziplist */
+            o->ptr = ziplistPush(o->ptr, (unsigned char*)field,
+                    sdslen(field), ZIPLIST_TAIL);
+            o->ptr = ziplistPush(o->ptr, (unsigned char*)value,
+                    sdslen(value), ZIPLIST_TAIL);
 
             sdsfree(field);
             sdsfree(value);
@@ -2054,11 +2056,11 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
             }
 
             /* Silently skip empty ziplists, if we'll end up with empty quicklist we'll fail later. */
-            if (lpLength(lp) == 0) {
-                zfree(lp);
+            if (ziplistLen(zl) == 0) {
+                zfree(zl);
                 continue;
             } else {
-                quicklistAppendListpack(o->ptr, lp);
+                quicklistAppendZiplist(o->ptr, zl);
             }
         }
 
@@ -2115,7 +2117,7 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
                         /* search for duplicate records */
                         sds field = sdstrynewlen(fstr, flen);
                         if (!field || dictAdd(dupSearchDict, field, NULL) != DICT_OK ||
-                            !lpSafeToAdd(lp, (size_t)flen + vlen)) {
+                            !ziplistSafeToAdd(zl, (size_t)flen + vlen)) {
                             rdbReportCorruptRDB("Hash zipmap with dup elements, or big length (%u)", flen);
                             dictRelease(dupSearchDict);
                             sdsfree(field);
@@ -2125,8 +2127,8 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
                             return NULL;
                         }
 
-                        lp = lpAppend(lp, fstr, flen);
-                        lp = lpAppend(lp, vstr, vlen);
+                        zl = ziplistPush(zl, fstr, flen, ZIPLIST_TAIL);
+                        zl = ziplistPush(zl, vstr, vlen, ZIPLIST_TAIL);
                     }
 
                     dictRelease(dupSearchDict);
@@ -2142,7 +2144,7 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
                     }
                 }
                 break;
-            case RDB_TYPE_LIST_ZIPLIST: 
+            case RDB_TYPE_LIST_ZIPLIST:
                 {
                     quicklist *ql = quicklistNew(server.list_max_listpack_size,
                                                  server.list_compress_depth);
@@ -2172,6 +2174,18 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
                     o->encoding = OBJ_ENCODING_QUICKLIST;
                     break;
                 }
+
+                if (ziplistLen(encoded) == 0) {
+                    zfree(encoded);
+                    o->ptr = NULL;
+                    decrRefCount(o);
+                    goto emptykey;
+                }
+
+                o->type = OBJ_LIST;
+                o->encoding = OBJ_ENCODING_ZIPLIST;
+                listTypeConvert(o,OBJ_ENCODING_QUICKLIST);
+                break;
             case RDB_TYPE_SET_INTSET:
                 if (deep_integrity_validation) server.stat_dump_payload_sanitizations++;
                 if (!intsetValidateIntegrity(encoded, encoded_len, deep_integrity_validation)) {
@@ -2223,13 +2237,15 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
                     return NULL;
                 }
                 o->type = OBJ_ZSET;
-                o->encoding = OBJ_ENCODING_LISTPACK;
+                o->encoding = OBJ_ENCODING_ZIPLIST;
                 if (zsetLength(o) == 0) {
+                    zfree(encoded);
+                    o->ptr = NULL;
                     decrRefCount(o);
                     goto emptykey;
                 }
 
-                if (zsetLength(o) > server.zset_max_listpack_entries)
+                if (zsetLength(o) > server.zset_max_ziplist_entries)
                     zsetConvert(o,OBJ_ENCODING_SKIPLIST);
                 break;
             case RDB_TYPE_HASH_ZIPLIST:
@@ -2269,13 +2285,15 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
                     return NULL;
                 }
                 o->type = OBJ_HASH;
-                o->encoding = OBJ_ENCODING_LISTPACK;
+                o->encoding = OBJ_ENCODING_ZIPLIST;
                 if (hashTypeLength(o) == 0) {
+                    zfree(encoded);
+                    o->ptr = NULL;
                     decrRefCount(o);
                     goto emptykey;
                 }
 
-                if (hashTypeLength(o) > server.hash_max_listpack_entries)
+                if (hashTypeLength(o) > server.hash_max_ziplist_entries)
                     hashTypeConvert(o, OBJ_ENCODING_HT);
                 break;
             default:
@@ -2528,6 +2546,23 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
                 }
                 raxStop(&ri_cg_pel);
             }
+
+            /* Verify that each PEL eventually got a consumer assigned to it. */
+            if (deep_integrity_validation) {
+                raxIterator ri_cg_pel;
+                raxStart(&ri_cg_pel,cgroup->pel);
+                raxSeek(&ri_cg_pel,"^",NULL,0);
+                while(raxNext(&ri_cg_pel)) {
+                    streamNACK *nack = ri_cg_pel.data;
+                    if (!nack->consumer) {
+                        raxStop(&ri_cg_pel);
+                        rdbReportCorruptRDB("Stream CG PEL entry without consumer");
+                        decrRefCount(o);
+                        return NULL;
+                    }
+                }
+                raxStop(&ri_cg_pel);
+            }
         }
     } else if (rdbtype == RDB_TYPE_MODULE || rdbtype == RDB_TYPE_MODULE_2) {
         uint64_t moduleid = rdbLoadLen(rdb,NULL);
@@ -2758,7 +2793,7 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
 
 
 /* Load an RDB file from the rio stream 'rdb'. On success C_OK is returned,
- * otherwise C_ERR is returned and 'errno' is set accordingly. 
+ * otherwise C_ERR is returned and 'errno' is set accordingly.
  * The rdb_loading_ctx argument holds objects to which the rdb will be loaded to,
  * currently it only allow to set db object and functionsCtx to which the data
  * will be loaded (in the future it might contains more such objects). */
@@ -2768,7 +2803,7 @@ int rdbLoadRioWithLoadingCtx(rio *rdb, int rdbflags, rdbSaveInfo *rsi, rdbLoadin
     redisDb *db = rdb_loading_ctx->dbarray+0;
     char buf[1024];
     int error;
-    long long empty_keys_skipped = 0;
+    long long empty_keys_skipped = 0, expired_keys_skipped = 0, keys_loaded = 0;
 
     rdb->update_cksum = rdbLoadProgressCallback;
     rdb->max_processing_chunk = server.loading_process_events_interval_bytes;
@@ -2941,7 +2976,11 @@ int rdbLoadRioWithLoadingCtx(rio *rdb, int rdbflags, rdbSaveInfo *rsi, rdbLoadin
                 io.ver = 2;
                 /* Call the rdb_load method of the module providing the 10 bit
                  * encoding version in the lower 10 bits of the module ID. */
-                int rc = mt->aux_load(&io,moduleid&1023, when);
+                if (mt->aux_load(&io,moduleid&1023, when) != REDISMODULE_OK || io.error) {
+                    moduleTypeNameByID(name,moduleid);
+                    serverLog(LL_WARNING,"The RDB file contains module AUX data for the module type '%s', that the responsible module is not able to load. Check for modules log above for additional clues.", name);
+                    goto eoferr;
+                }
                 if (io.ctx) {
                     moduleFreeContext(io.ctx);
                     zfree(io.ctx);
@@ -2975,7 +3014,7 @@ int rdbLoadRioWithLoadingCtx(rio *rdb, int rdbflags, rdbSaveInfo *rsi, rdbLoadin
         if ((key = rdbGenericLoadStringObject(rdb,RDB_LOAD_SDS,NULL)) == NULL)
             goto eoferr;
         /* Read value */
-        val = rdbLoadObject(type,rdb,key,db->id,&error);
+        val = rdbLoadObject(type,rdb,key,&error);
 
         /* Check if the key already expired. This function is used when loading
          * an RDB file from disk, either at startup, or when an RDB was
@@ -3016,14 +3055,14 @@ int rdbLoadRioWithLoadingCtx(rio *rdb, int rdbflags, rdbSaveInfo *rsi, rdbLoadin
             }
             sdsfree(key);
             decrRefCount(val);
-            server.rdb_last_load_keys_expired++;
+            expired_keys_skipped++;
         } else {
             robj keyobj;
             initStaticStringObject(keyobj,key);
 
             /* Add the new object in the hash table */
             int added = dbAddRDBLoad(db,key,val);
-            server.rdb_last_load_keys_loaded++;
+            keys_loaded++;
             if (!added) {
                 if (rdbflags & RDBFLAGS_ALLOW_DUP) {
                     /* This flag is useful for DEBUG RELOAD special modes.
@@ -3084,11 +3123,11 @@ int rdbLoadRioWithLoadingCtx(rio *rdb, int rdbflags, rdbSaveInfo *rsi, rdbLoadin
     if (empty_keys_skipped) {
         serverLog(LL_WARNING,
             "Done loading RDB, keys loaded: %lld, keys expired: %lld, empty keys skipped: %lld.",
-                server.rdb_last_load_keys_loaded, server.rdb_last_load_keys_expired, empty_keys_skipped);
+                keys_loaded, expired_keys_skipped, empty_keys_skipped);
     } else {
-        serverLog(LL_NOTICE,
+        serverLog(LL_WARNING,
             "Done loading RDB, keys loaded: %lld, keys expired: %lld.",
-                server.rdb_last_load_keys_loaded, server.rdb_last_load_keys_expired);
+                keys_loaded, expired_keys_skipped);
     }
     return C_OK;
 

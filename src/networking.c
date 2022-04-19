@@ -2887,8 +2887,8 @@ NULL
                 type = CLIENT_PAUSE_ALL;
             } else {
                 addReplyError(c,
-                    "CLIENT PAUSE mode must be WRITE or ALL");  
-                return;       
+                    "CLIENT PAUSE mode must be WRITE or ALL");
+                return;
             }
         }
 
@@ -3075,7 +3075,7 @@ NULL
             numflags++;
             if (c->flags & CLIENT_TRACKING_CACHING) {
                 addReplyBulkCString(c,"caching-yes");
-                numflags++;        
+                numflags++;
             }
         }
         if (c->flags & CLIENT_TRACKING_OPTOUT) {
@@ -3083,7 +3083,7 @@ NULL
             numflags++;
             if (c->flags & CLIENT_TRACKING_CACHING) {
                 addReplyBulkCString(c,"caching-no");
-                numflags++;        
+                numflags++;
             }
         }
         if (c->flags & CLIENT_TRACKING_NOLOOP) {
@@ -3336,7 +3336,7 @@ size_t getClientOutputBufferMemoryUsage(client *c) {
             repl_node_num = last->id - cur->id + 1;
         }
         return repl_buf_size + (repl_node_size*repl_node_num);
-    } else { 
+    } else {
         size_t list_item_size = sizeof(listNode) + sizeof(clientReplyBlock);
         return c->reply_bytes + (list_item_size*listLength(c->reply));
     }
@@ -3476,10 +3476,7 @@ int checkClientOutputBufferLimits(client *c) {
 int closeClientOnOutputBufferLimitReached(client *c, int async) {
     if (!c->conn) return 0; /* It is unsafe to free fake clients. */
     serverAssert(c->reply_bytes < SIZE_MAX-(1024*64));
-    /* Note that c->reply_bytes is irrelevant for replica clients
-     * (they use the global repl buffers). */
-    if ((c->reply_bytes == 0 && getClientType(c) != CLIENT_TYPE_SLAVE) ||
-        c->flags & CLIENT_CLOSE_ASAP) return 0;
+    if (c->reply_bytes == 0 || c->flags & CLIENT_CLOSE_ASAP) return 0;
     if (checkClientOutputBufferLimits(c)) {
         sds client = catClientInfoString(sdsempty(),c);
 
@@ -3544,7 +3541,7 @@ void flushSlavesOutputBuffers(void) {
  * A main use case of this function is to allow pausing replication traffic
  * so that a failover without data loss to occur. Replicas will continue to receive
  * traffic to facilitate this functionality.
- * 
+ *
  * This function is also internally used by Redis Cluster for the manual
  * failover procedure implemented by CLUSTER FAILOVER.
  *
@@ -3574,7 +3571,7 @@ void unpauseClients(void) {
     listNode *ln;
     listIter li;
     client *c;
-    
+
     server.client_pause_type = CLIENT_PAUSE_OFF;
     server.client_pause_end_time = 0;
 
@@ -3586,13 +3583,13 @@ void unpauseClients(void) {
     }
 }
 
-/* Returns true if clients are paused and false otherwise. */ 
+/* Returns true if clients are paused and false otherwise. */
 int areClientsPaused(void) {
     return server.client_pause_type != CLIENT_PAUSE_OFF;
 }
 
 /* Checks if the current client pause has elapsed and unpause clients
- * if it has. Also returns true if clients are now paused and false 
+ * if it has. Also returns true if clients are now paused and false
  * otherwise. */
 int checkClientPauseTimeoutAndReturnIfPaused(void) {
     if (!areClientsPaused())
@@ -3921,8 +3918,12 @@ int postponeClientRead(client *c) {
     if (server.io_threads_active &&
         server.io_threads_do_reads &&
         !ProcessingEventsWhileBlocked &&
+<<<<<<< HEAD
         !(c->flags & (CLIENT_MASTER|CLIENT_SLAVE|CLIENT_BLOCKED)) &&
         io_threads_op == IO_THREADS_OP_IDLE)
+=======
+        !(c->flags & (CLIENT_MASTER|CLIENT_SLAVE|CLIENT_PENDING_READ|CLIENT_BLOCKED)))
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
     {
         listAddNodeHead(server.clients_pending_read,c);
         c->pending_read_list_node = listFirst(server.clients_pending_read);
@@ -4006,6 +4007,7 @@ int handleClientsWithPendingReadsUsingThreads(void) {
         /* Once io-threads are idle we can update the client in the mem usage buckets */
         updateClientMemUsageBucket(c);
 
+        serverAssert(!(c->flags & CLIENT_BLOCKED));
         if (processPendingCommandsAndResetClient(c) == C_ERR) {
             /* If the client is no longer valid, we avoid
              * processing the client later. So we just go

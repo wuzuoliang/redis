@@ -1131,6 +1131,39 @@ start_server {tags {"zset"}} {
         }
     }
 
+        test "Basic ZPOP - $encoding RESP3" {
+            r hello 3
+            r del z1
+            create_zset z1 {0 a 1 b 2 c 3 d}
+            assert_equal {a 0.0} [r zpopmin z1]
+            assert_equal {d 3.0} [r zpopmax z1]
+            r hello 2
+        }
+
+        test "ZPOP with count - $encoding RESP3" {
+            r hello 3
+            r del z1
+            create_zset z1 {0 a 1 b 2 c 3 d}
+            assert_equal {{a 0.0} {b 1.0}} [r zpopmin z1 2]
+            assert_equal {{d 3.0} {c 2.0}} [r zpopmax z1 2]
+            r hello 2
+        }
+
+        test "BZPOP - $encoding RESP3" {
+            r hello 3
+            set rd [redis_deferring_client]
+            create_zset zset {0 a 1 b 2 c}
+
+            $rd bzpopmin zset 5
+            assert_equal {zset a 0} [$rd read]
+            $rd bzpopmin zset 5
+            assert_equal {zset b 1} [$rd read]
+            $rd bzpopmax zset 5
+            assert_equal {zset c 2} [$rd read]
+            assert_equal 0 [r exists zset]
+            r hello 2
+        }
+
         r config set zset-max-ziplist-entries $original_max_entries
         r config set zset-max-ziplist-value $original_max_value
     }
@@ -2201,7 +2234,11 @@ start_server {tags {"zset"}} {
         }
     }
 
+<<<<<<< HEAD
     foreach {type contents} "listpack {1 a 2 b 3 c} skiplist {1 a 2 b 3 [randstring 70 90 alpha]}" {
+=======
+    foreach {type contents} "ziplist {1 a 2 b 3 c} skiplist {1 a 2 b 3 [randstring 70 90 alpha]}" {
+>>>>>>> 34505d26f74a33a14b405746aa8feffdfe24f807
         set original_max_value [lindex [r config get zset-max-ziplist-value] 1]
         r config set zset-max-ziplist-value 10
         create_zset myzset $contents

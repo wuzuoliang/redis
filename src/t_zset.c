@@ -1226,18 +1226,18 @@ void zsetConvert(robj *zobj, int encoding) {
     }
 }
 
-/* Convert the sorted set object into a listpack if it is not already a listpack
+/* Convert the sorted set object into a ziplist if it is not already a ziplist
  * and if the number of elements and the maximum element size and total elements size
  * are within the expected ranges. */
-void zsetConvertToListpackIfNeeded(robj *zobj, size_t maxelelen, size_t totelelen) {
-    if (zobj->encoding == OBJ_ENCODING_LISTPACK) return;
+void zsetConvertToZiplistIfNeeded(robj *zobj, size_t maxelelen, size_t totelelen) {
+    if (zobj->encoding == OBJ_ENCODING_ZIPLIST) return;
     zset *zset = zobj->ptr;
 
-    if (zset->zsl->length <= server.zset_max_listpack_entries &&
-        maxelelen <= server.zset_max_listpack_value &&
-        lpSafeToAdd(NULL, totelelen))
+    if (zset->zsl->length <= server.zset_max_ziplist_entries &&
+        maxelelen <= server.zset_max_ziplist_value &&
+        ziplistSafeToAdd(NULL, totelelen))
     {
-        zsetConvert(zobj,OBJ_ENCODING_LISTPACK);
+        zsetConvert(zobj,OBJ_ENCODING_ZIPLIST);
     }
 }
 
@@ -1264,7 +1264,7 @@ int zsetScore(robj *zobj, sds member, double *score) {
 /* Add a new element or update the score of an existing element in a sorted
  * set, regardless of its encoding.
  *
- * The set of flags change the command behavior. 
+ * The set of flags change the command behavior.
  *
  * The input flags are the following:
  *
@@ -1273,9 +1273,9 @@ int zsetScore(robj *zobj, sds member, double *score) {
  *            assume 0 as previous score.
  * ZADD_NX:   Perform the operation only if the element does not exist.
  * ZADD_XX:   Perform the operation only if the element already exist.
- * ZADD_GT:   Perform the operation on existing elements only if the new score is 
+ * ZADD_GT:   Perform the operation on existing elements only if the new score is
  *            greater than the current score.
- * ZADD_LT:   Perform the operation on existing elements only if the new score is 
+ * ZADD_LT:   Perform the operation on existing elements only if the new score is
  *            less than the current score.
  *
  * When ZADD_INCR is used, the new score of the element is stored in
@@ -1360,9 +1360,9 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
         } else if (!xx) {
             /* check if the element is too large or the list
              * becomes too long *before* executing zzlInsert. */
-            if (zzlLength(zobj->ptr)+1 > server.zset_max_listpack_entries ||
-                sdslen(ele) > server.zset_max_listpack_value ||
-                !lpSafeToAdd(zobj->ptr, sdslen(ele)))
+            if (zzlLength(zobj->ptr)+1 > server.zset_max_ziplist_entries ||
+                sdslen(ele) > server.zset_max_ziplist_value ||
+                !ziplistSafeToAdd(zobj->ptr, sdslen(ele)))
             {
                 zsetConvert(zobj,OBJ_ENCODING_SKIPLIST);
             } else {
@@ -1377,7 +1377,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
         }
     }
 
-    /* Note that the above block handling listpack would have either returned or
+    /* Note that the above block handling ziplist would have either returned or
      * converted the key to skiplist. */
     if (zobj->encoding == OBJ_ENCODING_SKIPLIST) {
         zset *zs = zobj->ptr;
@@ -1706,7 +1706,7 @@ void zaddGenericCommand(client *c, int flags) {
             "XX and NX options at the same time are not compatible");
         return;
     }
-    
+
     if ((gt && nx) || (lt && nx) || (gt && lt)) {
         addReplyError(c,
             "GT, LT, and/or NX options at the same time are not compatible");
@@ -2759,8 +2759,8 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
 
     if (dstkey) {
         if (dstzset->zsl->length) {
-            zsetConvertToListpackIfNeeded(dstobj, maxelelen, totelelen);
-            setKey(c, c->db, dstkey, dstobj, 0);
+            zsetConvertToZiplistIfNeeded(dstobj, maxelelen, totelelen);
+            setKey(c, c->db, dstkey, dstobj);
             addReplyLongLong(c, zsetLength(dstobj));
             notifyKeyspaceEvent(NOTIFY_ZSET,
                                 (op == SET_OP_UNION) ? "zunionstore" :
@@ -3120,7 +3120,7 @@ void zrevrangeCommand(client *c) {
 
 /* This command implements ZRANGEBYSCORE, ZREVRANGEBYSCORE. */
 void genericZrangebyscoreCommand(zrange_result_handler *handler,
-    zrangespec *range, robj *zobj, long offset, long limit, 
+    zrangespec *range, robj *zobj, long offset, long limit,
     int reverse) {
     unsigned long rangelen = 0;
 
@@ -3821,10 +3821,8 @@ void genericZpopCommand(client *c, robj **keyv, int keyc, int where, int emitkey
         return;
     }
 
+    void *arraylen_ptr = addReplyDeferredLen(c);
     long result_count = 0;
-
-    /* When count is -1, we need to correct it to 1 for plain single pop. */
-    if (count == -1) count = 1;
 
     long llen = zsetLength(zobj);
     long rangelen = (count > llen) ? llen : count;
@@ -3845,6 +3843,11 @@ void genericZpopCommand(client *c, robj **keyv, int keyc, int where, int emitkey
         addReplyBulk(c, key);
         addReplyArrayLen(c, rangelen);
     }
+
+    /* Respond with a single (flat) array in RESP2 or if countarg is not
+     * provided (returning a single element). In RESP3, when countarg is
+     * provided, use nested array.  */
+    int use_nested_array = c->resp > 2 && countarg != NULL;
 
     /* Remove the element. */
     do {
@@ -3901,7 +3904,6 @@ void genericZpopCommand(client *c, robj **keyv, int keyc, int where, int emitkey
         addReplyDouble(c,score);
         sdsfree(ele);
         ++result_count;
-    } while(--rangelen);
 
     /* Remove the key, if indeed needed. */
     if (zsetLength(zobj) == 0) {
@@ -3911,14 +3913,10 @@ void genericZpopCommand(client *c, robj **keyv, int keyc, int where, int emitkey
         notifyKeyspaceEvent(NOTIFY_GENERIC,"del",key,c->db->id);
     }
 
-    if (c->cmd->proc == zmpopCommand) {
-        /* Always replicate it as ZPOP[MIN|MAX] with COUNT option instead of ZMPOP. */
-        robj *count_obj = createStringObjectFromLongLong((count > llen) ? llen : count);
-        rewriteClientCommandVector(c, 3,
-                                   (where == ZSET_MAX) ? shared.zpopmax : shared.zpopmin,
-                                   key, count_obj);
-        decrRefCount(count_obj);
+    if (!use_nested_array) {
+        result_count *= 2;
     }
+    setDeferredArrayLen(c,arraylen_ptr,result_count + (emitkey != 0));
 }
 
 /* ZPOPMIN/ZPOPMAX key [<count>] */

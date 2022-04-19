@@ -306,7 +306,7 @@ void saddCommand(client *c) {
 
     set = lookupKeyWrite(c->db,c->argv[1]);
     if (checkType(c,set,OBJ_SET)) return;
-    
+
     if (set == NULL) {
         set = setTypeCreate(c->argv[2]->ptr);
         dbAdd(c->db,c->argv[1],set);
@@ -896,8 +896,6 @@ void sinterGenericCommand(client *c, robj **setkeys,
                 server.dirty++;
             }
             addReply(c,shared.czero);
-        } else if (cardinality_only) {
-            addReplyLongLong(c,cardinality);
         } else {
             addReply(c,shared.emptyset[c->resp]);
         }
@@ -1010,36 +1008,9 @@ void sinterCommand(client *c) {
     sinterGenericCommand(c, c->argv+1,  c->argc-1, NULL, 0, 0);
 }
 
-/* SINTERCARD numkeys key [key ...] [LIMIT limit] */
-void sinterCardCommand(client *c) {
-    long j;
-    long numkeys = 0; /* Number of keys. */
-    long limit = 0;   /* 0 means not limit. */
-
-    if (getRangeLongFromObjectOrReply(c, c->argv[1], 1, LONG_MAX,
-                                      &numkeys, "numkeys should be greater than 0") != C_OK)
-        return;
-    if (numkeys > (c->argc - 2)) {
-        addReplyError(c, "Number of keys can't be greater than number of args");
-        return;
-    }
-
-    for (j = 2 + numkeys; j < c->argc; j++) {
-        char *opt = c->argv[j]->ptr;
-        int moreargs = (c->argc - 1) - j;
-
-        if (!strcasecmp(opt, "LIMIT") && moreargs) {
-            j++;
-            if (getPositiveLongFromObjectOrReply(c, c->argv[j], &limit,
-                                                 "LIMIT can't be negative") != C_OK)
-                return;
-        } else {
-            addReplyErrorObject(c, shared.syntaxerr);
-            return;
-        }
-    }
-
-    sinterGenericCommand(c, c->argv+2, numkeys, NULL, 1, limit);
+/* SINTERSTORE destination key [key ...] */
+void sinterstoreCommand(client *c) {
+    sinterGenericCommand(c,c->argv+2,c->argc-2,c->argv[1]);
 }
 
 /* SINTERSTORE destination key [key ...] */

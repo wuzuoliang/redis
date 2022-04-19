@@ -47,23 +47,8 @@
  * just one byte, it still won't overflow the 16 bit count field. */
 static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65536};
 
-/* packed_threshold is initialized to 1gb*/
-static size_t packed_threshold = (1 << 30);
-
-/* set threshold for PLAIN nodes, the real limit is 4gb */
-#define isLargeElement(size) ((size) >= packed_threshold)
-
-int quicklistisSetPackedThreshold(size_t sz) {
-    /* Don't allow threshold to be set above or even slightly below 4GB */
-    if (sz > (1ull<<32) - (1<<20)) {
-        return 0;
-    }
-    packed_threshold = sz;
-    return 1;
-}
-
-/* Maximum size in bytes of any multi-element listpack.
- * Larger values will live in their own isolated listpacks.
+/* Maximum size in bytes of any multi-element ziplist.
+ * Larger values will live in their own isolated ziplists.
  * This is used only if we're limited by record count. when we're limited by
  * size, the maximum limit is bigger, but still safe.
  * 8k is a recommended / default size limit */
@@ -540,12 +525,7 @@ static void __quicklistInsertPlainNode(quicklist *quicklist, quicklistNode *old_
  * Returns 1 if new head created. */
 int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
     quicklistNode *orig_head = quicklist->head;
-
-    if (unlikely(isLargeElement(sz))) {
-        __quicklistInsertPlainNode(quicklist, quicklist->head, value, sz, 0);
-        return 1;
-    }
-
+    assert(sz < UINT32_MAX); /* TODO: add support for quicklist nodes that are sds encoded (not zipped) */
     if (likely(
             _quicklistNodeAllowInsert(quicklist->head, quicklist->fill, sz))) {
         quicklist->head->entry = lpPrepend(quicklist->head->entry, value, sz);
@@ -568,11 +548,7 @@ int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
  * Returns 1 if new tail created. */
 int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
     quicklistNode *orig_tail = quicklist->tail;
-    if (unlikely(isLargeElement(sz))) {
-        __quicklistInsertPlainNode(quicklist, quicklist->tail, value, sz, 1);
-        return 1;
-    }
-
+    assert(sz < UINT32_MAX); /* TODO: add support for quicklist nodes that are sds encoded (not zipped) */
     if (likely(
             _quicklistNodeAllowInsert(quicklist->tail, quicklist->fill, sz))) {
         quicklist->tail->entry = lpAppend(quicklist->tail->entry, value, sz);
@@ -938,6 +914,7 @@ REDIS_STATIC void _quicklistInsert(quicklistIter *iter, quicklistEntry *entry,
     int fill = quicklist->fill;
     quicklistNode *node = entry->node;
     quicklistNode *new_node = NULL;
+    assert(sz < UINT32_MAX); /* TODO: add support for quicklist nodes that are sds encoded (not zipped) */
 
     if (!node) {
         /* we have no reference node, so let's create only node in the list */
@@ -1058,7 +1035,7 @@ REDIS_STATIC void _quicklistInsert(quicklistIter *iter, quicklistEntry *entry,
 
     /* In any case, we reset iterator to forbid use of iterator after insert.
      * Notice: iter->current has been compressed in _quicklistInsert(). */
-    resetIterator(iter); 
+    resetIterator(iter);
 }
 
 void quicklistInsertBefore(quicklistIter *iter, quicklistEntry *entry,
@@ -2700,7 +2677,7 @@ int quicklistTest(int argc, char *argv[], int flags) {
             if (iter)
                 ERR("Index past elements: %lld", entry.longval);
             ql_release_iterator(iter);
-            
+
             iter = quicklistGetIteratorEntryAtIdx(ql, -1, &entry);
             if (entry.longval != 4444)
                 ERR("Not 4444 (reverse), %lld", entry.longval);
@@ -2715,12 +2692,12 @@ int quicklistTest(int argc, char *argv[], int flags) {
             if (entry.longval != 2222)
                 ERR("Not 2222 (reverse), %lld", entry.longval);
             ql_release_iterator(iter);
-            
+
             iter = quicklistGetIteratorEntryAtIdx(ql, -4, &entry);
             if (entry.longval != 1111)
                 ERR("Not 1111 (reverse), %lld", entry.longval);
             ql_release_iterator(iter);
-            
+
             iter = quicklistGetIteratorEntryAtIdx(ql, -5, &entry);
             if (iter)
                 ERR("Index past elements (reverse), %lld", entry.longval);
@@ -3166,7 +3143,7 @@ int quicklistTest(int argc, char *argv[], int flags) {
         TEST("compress and decompress quicklist listpack node") {
             quicklistNode *node = quicklistCreateNode();
             node->entry = lpNew(0);
-            
+
             /* Create a rand string */
             size_t sz = (1 << 25); /* 32MB per one entry */
             unsigned char *s = zmalloc(sz);

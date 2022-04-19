@@ -282,7 +282,6 @@ sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
     len = sdslen(s);
     //sh 回到指向了这个sds的起始位置。
     sh = (char*)s-sdsHdrSize(oldtype);
-    // newlen 代表最小需要的长度
     reqlen = newlen = (len+addlen);
     assert(newlen > len);   /* Catch size_t overflow */
     if (greedy == 1) {
